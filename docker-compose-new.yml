@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  voice-chat-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    image: voice-chat-ai:latest
+    container_name: voice-chat-ai
+    environment:
+      # PulseAudio configuration for macOS/Windows/Linux
+      - PULSE_SERVER=/mnt/wslg/PulseServer  # Default for WSL2
+      # Uncomment the appropriate line for your system:
+      # - PULSE_SERVER=unix:/tmp/pulse/native  # For native Linux
+    env_file:
+      - .env
+    volumes:
+      # Audio volumes - choose the appropriate one for your system
+      # For macOS Docker Desktop:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      
+      # For Windows WSL2:
+      # - \\wsl$\Ubuntu\mnt\wslg:/mnt/wslg/
+      
+      # For native Linux:
+      # - ~/.config/pulse/cookie:/root/.config/pulse/cookie:ro
+      # - /run/user/1000/pulse:/tmp/pulse:ro
+      
+      # Application volumes
+      - ./outputs:/app/outputs
+      - ./characters:/app/characters
+      - ./elevenlabs_voices.json:/app/elevenlabs_voices.json
+      - ./.env:/app/.env:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    networks:
+      - voice-chat-network
+    platform: linux/amd64  # Specify platform for M1/M2 Macs
+
+  # Optional: Ollama service for local models
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   restart: unless-stopped
+  #   networks:
+  #     - voice-chat-network
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+
+networks:
+  voice-chat-network:
+    driver: bridge
+
+# volumes:
+#   ollama_data:

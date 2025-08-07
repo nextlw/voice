@@ -1,0 +1,65 @@
+# Use Python 3.10 base image
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV COQUI_TOS_AGREED=1
+ENV PATH="/root/.local/bin:$PATH"
+
+# Create working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libsndfile1 \
+    portaudio19-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    wget \
+    curl \
+    ffmpeg \
+    alsa-utils \
+    pulseaudio \
+    libsdl2-dev \
+    dbus \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure dbus
+RUN dbus-uuidgen > /etc/machine-id
+
+# Configure ALSA to use PulseAudio
+RUN echo "pcm.!default pulse" > /root/.asoundrc && \
+    echo "ctl.!default pulse" >> /root/.asoundrc
+
+# Copy requirements file (use minimal version for Docker)
+COPY requirements_minimal.txt /app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app /app/app
+COPY characters /app/characters
+COPY outputs /app/outputs
+COPY cli.py /app/cli.py
+COPY elevenlabs_voices.json.example /app/elevenlabs_voices.json
+COPY docs /app/docs
+COPY startup_docker.py /app/startup_docker.py
+
+# Copy .env file (if exists, otherwise use sample)
+COPY .env* /app/
+
+# Make startup script executable
+RUN chmod +x /app/startup_docker.py
+
+# Expose port
+EXPOSE 8000
+
+# Command to run the application using the startup script
+CMD ["python", "/app/startup_docker.py"]
