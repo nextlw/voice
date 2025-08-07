@@ -113,6 +113,10 @@ document.addEventListener("DOMContentLoaded", function() {
             const option = document.createElement('option');
             option.value = character;
             option.textContent = character.replace(/_/g, ' '); // Replace all underscores with spaces
+            // Seleciona "seu_elias" por padrão
+            if (character === 'seu_elias') {
+                option.selected = true;
+            }
             characterSelect.appendChild(option);
         });
         

@@ -1,5 +1,6 @@
 # Use a lighter base image (Python 3.10 slim version)
-FROM python:3.10-slim
+# Force platform to linux/amd64 for Render.com compatibility
+FROM --platform=linux/amd64 python:3.10-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -12,12 +13,24 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    gcc \
+    g++ \
+    git \
     libsndfile1 \
+    libsndfile1-dev \
     portaudio19-dev \
+    python3-dev \
     wget \
     curl \
     pulseaudio \
+    pulseaudio-utils \
+    libpulse-dev \
     libsdl2-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
     dbus \
     && rm -rf /var/lib/apt/lists/*
 
@@ -41,7 +54,7 @@ ENV JACK_NO_START_SERVER=1
 ENV JACK_NO_AUDIO_RESERVATION=1
 
 # Copy only necessary files (EXCLUDING large checkpoint and XTTS-v2)
-COPY requirements_cpu.txt /app/requirements.txt
+COPY docker/requirements_render.txt /app/requirements.txt
 COPY app /app/app
 COPY characters /app/characters
 COPY outputs /app/outputs
@@ -53,14 +66,27 @@ COPY LICENSE /app/LICENSE
 COPY docs /app/docs
 
 # Install Python dependencies (without cache to reduce image size)
-RUN pip install --upgrade pip && pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r /app/requirements.txt || \
+    (echo "Retrying pip install..." && pip install --no-cache-dir -r /app/requirements.txt) && \
+    python -m spacy download en_core_web_sm || true
 
 # Expose the port that the app runs on
 EXPOSE 8000
 
-# Add a wrapper script to redirect stderr when running the application
-RUN echo '#!/bin/bash\nexec uvicorn app.main:app --host 0.0.0.0 --port 8000 2> >(grep -v "ALSA\|snd_\|JACK\|jack\|JackShmReadWritePtr" >&2)' > /app/start.sh && \
+# Create startup script that properly handles audio warnings
+RUN echo '#!/bin/bash' > /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Suppress audio warnings' >> /app/start.sh && \
+    echo 'export ALSA_CARD=none' >> /app/start.sh && \
+    echo 'export AUDIODEV=null' >> /app/start.sh && \
+    echo 'export SDL_AUDIODRIVER=dummy' >> /app/start.sh && \
+    echo 'export JACK_NO_START_SERVER=1' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Start the application' >> /app/start.sh && \
+    echo 'exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | grep -v "ALSA\|snd_\|JACK\|jack\|JackShmReadWritePtr"' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 # Command to run the application
-CMD ["/app/start.sh"]
+CMD ["/bin/bash", "/app/start.sh"]
