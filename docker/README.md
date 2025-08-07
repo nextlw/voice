@@ -10,8 +10,7 @@ docker/
 ├── Dockerfile.render       # Para Render.com (linux/amd64)
 ├── requirements_local.txt  # Dependências para build local
 ├── requirements_render.txt # Dependências para Render
-├── build-local.sh         # Script para build local
-├── build-render.sh        # Script para build Render
+├── (scripts movidos para /scripts/docker/)
 └── README.md              # Este arquivo
 ```
 
@@ -20,7 +19,7 @@ docker/
 ### Desenvolvimento Local (Mac M1/M2)
 ```bash
 cd voice-chat-ai
-./docker/build-local.sh
+./scripts/docker/build-local.sh
 ```
 - ✅ Build rápido (2-5 min)
 - ✅ Performance nativa
@@ -29,7 +28,7 @@ cd voice-chat-ai
 ### Deploy no Render.com
 ```bash
 cd voice-chat-ai
-./docker/build-render.sh
+./scripts/docker/build-render.sh
 ```
 - ✅ Compatível com Render.com
 - ⚠️ Build lento no Mac (10-20 min - emulação)
@@ -40,7 +39,7 @@ cd voice-chat-ai
 ### Build e Run Local
 ```bash
 # Build
-./docker/build-local.sh
+./scripts/docker/build-local.sh
 
 # Run
 docker run -d -p 8000:8000 --env-file .env --name voice-chat-local voice-chat-ai-local:latest
@@ -55,7 +54,7 @@ docker stop voice-chat-local && docker rm voice-chat-local
 ### Build para Render
 ```bash
 # Build
-./docker/build-render.sh
+./scripts/docker/build-render.sh
 
 # Tag e Push
 docker tag voice-chat-ai-render:latest seu-usuario/voice-chat-ai:latest

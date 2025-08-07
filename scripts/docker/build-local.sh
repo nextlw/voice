@@ -46,7 +46,7 @@ if [ $? -eq 0 ]; then
     echo "  http://localhost:8000"
     echo ""
     echo "⚠️  Note: This image is for local Mac use only."
-    echo "For Render.com deployment, use ./docker/build-render.sh instead."
+    echo "For Render.com deployment, use ./scripts/docker/build-render.sh instead."
 else
     echo ""
     echo "❌ Build failed!"
