@@ -227,3 +227,5 @@ freeze_requiremenets.txt.bak
 elevenlabs_voices.json
 .env.sample
 wawa-lipsync/
+.elaimodes
+.elai/
