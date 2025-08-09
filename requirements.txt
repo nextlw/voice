@@ -8,7 +8,7 @@ PyAudio==0.2.14
 numpy==1.26.4
 faster-whisper==1.1.1
 soundfile==0.12.1    
-langid==1.1.6
+# langid==1.1.6  # Temporariamente removido - incompatível com Python 3.11+
 librosa==0.10.2.post1
 scipy==1.14.1  # Versão mais recente com wheels pré-compiladas
 transformers==4.51.0
