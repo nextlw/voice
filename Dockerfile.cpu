@@ -1,15 +1,15 @@
 # Use a lighter base image (Python 3.10 slim version)
-FROM python:3.10-slim
+FROM python:3.13-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PATH="/root/.local/bin:$PATH"
+ENV PATH="/root/.local/bin:/root/.cargo/bin:$PATH"
 ENV COQUI_TOS_AGREED=1
 
 # Create a working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Rust
 RUN apt-get update && apt-get install -y \
     build-essential \
     libsndfile1 \
@@ -19,7 +19,9 @@ RUN apt-get update && apt-get install -y \
     pulseaudio \
     libsdl2-dev \
     dbus \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . /root/.cargo/env
 
 # Install ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
