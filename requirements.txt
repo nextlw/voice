@@ -1,8 +1,8 @@
-# CUDA-enabled PyTorch and related libraries
-torch>=2.6.0,<2.8.0
-torchaudio>=2.6.0,<2.8.0
-torchvision>=0.21.0,<0.23.0
---extra-index-url https://download.pytorch.org/whl/cu118
+# CPU-optimized PyTorch and related libraries (no CUDA)
+torch==2.7.0
+torchaudio==2.7.0
+torchvision==0.22.0
+-f https://download.pytorch.org/whl/torch_stable.html
 
 PyAudio==0.2.14
 numpy==1.26.4
