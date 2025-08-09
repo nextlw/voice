@@ -778,8 +778,19 @@ document.addEventListener("DOMContentLoaded", function() {
                     const option = document.createElement('option');
                     option.value = character;
                     option.textContent = character.replace(/_/g, ' '); // Replace all underscores with spaces
+                    // Seleciona "seu_elias" por padrão
+                    if (character === 'seu_elias') {
+                        option.selected = true;
+                    }
                     characterSelect.appendChild(option);
                 });
+                
+                // Garante que seu_elias seja selecionado após carregar todos
+                setTimeout(() => {
+                    if (characterSelect.querySelector('option[value="seu_elias"]')) {
+                        characterSelect.value = 'seu_elias';
+                    }
+                }, 100);
             })
             .catch(error => {
                 console.error('Error fetching characters:', error);

@@ -1,16 +1,16 @@
-# CUDA-enabled PyTorch and related libraries
-torch>=2.6.0,<2.8.0
-torchaudio>=2.6.0,<2.8.0
-torchvision>=0.21.0,<0.23.0
---extra-index-url https://download.pytorch.org/whl/cu118
+# CPU-optimized PyTorch and related libraries (no CUDA)
+torch==2.7.0
+torchaudio==2.7.0
+torchvision==0.22.0
+-f https://download.pytorch.org/whl/torch_stable.html
 
 PyAudio==0.2.14
 numpy==1.26.4
 faster-whisper==1.1.1
 soundfile==0.12.1    
-langid==1.1.6
+# langid==1.1.6  # Temporariamente removido - incompatível com Python 3.11+
 librosa==0.10.2.post1
-scipy==1.11.4
+scipy==1.14.1  # Versão mais recente com wheels pré-compiladas
 transformers==4.51.0
 pydantic==2.7.4
 pillow==10.3.0
