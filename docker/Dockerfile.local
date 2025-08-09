@@ -75,7 +75,7 @@ COPY LICENSE /app/LICENSE
 COPY docs /app/docs
 
 # Expose the port
-EXPOSE 8000
+EXPOSE 8080
 
 # Create startup script
 RUN echo '#!/bin/bash' > /app/start.sh && \
@@ -88,7 +88,7 @@ RUN echo '#!/bin/bash' > /app/start.sh && \
     echo 'export JACK_NO_START_SERVER=1' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
     echo '# Start the application' >> /app/start.sh && \
-    echo 'exec uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | grep -v "ALSA\\|snd_\\|JACK\\|jack\\|JackShmReadWritePtr"' >> /app/start.sh && \
+    echo 'exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 2>&1 | grep -v "ALSA\\|snd_\\|JACK\\|jack\\|JackShmReadWritePtr"' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 # Command to run the application
