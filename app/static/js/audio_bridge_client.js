@@ -222,7 +222,7 @@ class AudioBridgeClient {
         }
         
         return new Promise((resolve, reject) => {
-            getUserMedia.call(navigator, constraints, resolve, function(err) {
+            getUserMedia.call(navigator, constraints, resolve, (err) => {
                 // Enable fallback mode and return null instead of rejecting
                 console.warn(`Using fallback mode due to error: ${err.message || err.name}`);
                 this.useFallbackMode = true;
