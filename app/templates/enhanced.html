@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Voice Chat AI with OpenAI Enhanced features">
-    <meta name="keywords" content="AI, voice chat, OpenAI, GPT-4o, TTS, speech-to-text">
+    <meta name="description" content="Elai - Um produto Nexcode com funcionalidades aprimoradas">
+    <meta name="keywords" content="AI, voz, chat, OpenAI, GPT-4o, TTS, transcrição de voz">
     <meta name="author" content="bigsk1">
-    <title>Voice Chat AI - OpenAI Enhanced</title>
+    <title>Elai - Um produto Nexcode</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
     <link rel="icon" href="/app/static/favicon.ico" type="image/x-icon">
     <style>
@@ -14,7 +14,7 @@
         .control-button {
             margin: 0 8px;
         }
-        
+
         /* Match button size with main page */
         .controls {
             display: flex;
@@ -24,7 +24,7 @@
             justify-content: center;
             width: 100%;
         }
-        
+
         .controls button, .control-button {
             padding: 8px 12px;
             flex-grow: 1;
@@ -34,7 +34,7 @@
             border-radius: 4px;
             font-weight: normal;
         }
-        
+
         /* Message types */
         .system-message {
             color: #777;
@@ -43,7 +43,7 @@
             margin: 0.5rem 0;
             font-style: italic;
         }
-        
+
         .error-message {
             color: #d9534f;
             background-color: rgba(217, 83, 79, 0.1);
@@ -52,25 +52,25 @@
             margin: 0.5rem 0;
             font-weight: bold;
         }
-        
+
         /* Microphone animation and status indicators */
         .mic-off {
             color: #aaa;
         }
-        
+
         .mic-waiting {
             color: #ffc107; /* Yellow/amber color */
         }
-        
+
         .mic-on {
             color: #28a745; /* Green color */
         }
-        
+
         /* Pulse animation for active recording */
         .pulse-animation {
             animation: pulse 1.5s infinite;
         }
-        
+
         @keyframes pulse {
             0% {
                 opacity: 1;
@@ -85,7 +85,7 @@
                 transform: scale(1);
             }
         }
-        
+
         /* Listening indicator with animated dots */
         .listening-indicator {
             display: flex;
@@ -96,12 +96,12 @@
             color: #ffc107;
             font-style: italic;
         }
-        
+
         .listening-dots {
             display: inline-flex;
             margin-left: 8px;
         }
-        
+
         .dot {
             width: 6px;
             height: 6px;
@@ -110,7 +110,7 @@
             margin: 0 2px;
             animation: dot-fade 1.4s infinite;
         }
-        
+
         @keyframes dot-fade {
             0%, 100% {
                 opacity: 0.2;
@@ -119,18 +119,18 @@
                 opacity: 1;
             }
         }
-        
+
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             .container {
                 padding: 5px;
             }
-            
+
             header {
                 flex-direction: column;
                 padding: 10px 5px;
             }
-            
+
             .header-controls {
                 margin-top: 10px;
                 width: 100%;
@@ -138,56 +138,56 @@
                 display: flex;
                 flex-direction: row;
             }
-            
+
             .header-controls .button-group {
                 display: flex;
                 gap: 10px;
                 margin-left: 5px;
             }
-            
+
             .header-controls .main-nav {
                 margin-left: 0;
                 margin-right: 5px;
             }
-            
+
             #messages {
                 max-height: 50vh;
             }
-            
+
             .controls {
                 flex-direction: column;
                 gap: 20px;
                 margin: 0 auto 15px auto;
                 width: 30%;
             }
-            
+
             .controls button, .control-button {
                 max-width: 100%;
                 width: 100%;
                 margin: 0;
                 height: 32px;
             }
-            
+
             .control-button {
                 margin: 0;
                 font-weight: normal;
             }
         }
-        
+
         /* Small phone styles */
         @media (max-width: 480px) {
             body {
                 font-size: 14px;
             }
-            
+
             h1 {
                 font-size: 1.3rem;
             }
-            
+
             .container {
                 padding: 5px;
             }
-            
+
             .form-group select, .form-group button {
                 width: 100%;
             }
@@ -203,7 +203,7 @@
 <body class="dark-mode">
     <header>
         <h1>
-            Voice Chat AI
+            Elai - Um produto Nexcode
             <div id="mic-icon" class="mic-off">&#x1F399;</div>
         </h1>
         <div class="header-controls">
@@ -257,7 +257,7 @@
                 <label for="characterSelect">Character:</label>
                 <select id="characterSelect"></select>
             </div>
-            
+
             <div class="setting-group">
                 <label for="voiceSelect">Voice:</label>
                 <select id="voiceSelect">
@@ -274,7 +274,7 @@
                     <option value="verse">Verse - male - no tts-1</option>
                 </select>
             </div>
-            
+
             <div class="setting-group">
                 <label for="modelSelect">Chat Model:</label>
                 <select id="modelSelect">
@@ -283,7 +283,7 @@
                     <option value="gpt-4">GPT-4</option>
                 </select>
             </div>
-            
+
             <div class="setting-group">
                 <label for="ttsModelSelect">TTS Model:</label>
                 <select id="ttsModelSelect">
@@ -292,7 +292,7 @@
                     <option value="tts-1-hd">TTS-1 HD</option>
                 </select>
             </div>
-            
+
             <div class="setting-group">
                 <label for="transcriptionModelSelect">Transcription:</label>
                 <select id="transcriptionModelSelect">
@@ -305,9 +305,9 @@
     </main>
 
     <footer>
-        <p><a href="https://github.com/bigsk1/voice-chat-ai" target="_blank">GitHub Repository</a></p>
+        <p><a href="https://app.nexcode.com.br" target="_blank">NEXCODE</a></p>
     </footer>
 
     <script src="/app/static/js/enhanced.js"></script>
 </body>
-</html> 
+</html>

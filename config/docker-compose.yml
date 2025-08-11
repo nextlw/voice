@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  voice-chat-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: voice-chat-ai-cpu
+    env_file:
+      - .env
+    volumes:
+      - ./outputs:/app/outputs
+      - ./characters:/app/characters
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

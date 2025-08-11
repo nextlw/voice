@@ -11,6 +11,7 @@ You can run all locally, you can use openai for chat and voice, you can mix betw
 WebRTC Real Time API with OpenAI you can have a real time conversation, interrupt the AI and have instant responses. You can also use OpenAI's new TTS model gpt-4o-mini-tts to make the AI more human like with emotions and expressive voices.
 
 Check out the game and story documentation:
+
 - [Games Documentation](docs/games.md): Play interactive games with various game master characters.
 - [Stories Documentation](docs/stories.md): Experience immersive story adventures with AI characters.
 
@@ -18,7 +19,7 @@ Check out the game and story documentation:
 
 Get up and running fast with Voice Chat AI! 🔊
 
-- [**Install Locally**](#installation): Set up with Python 3.10 on Windows or Linux.
+- [**Install Locally**](#installation): Set up with Python 3.10 on Windows, Linux or MacOS.
 - [**Run with Docker**](#install-with-docker): Use Docker run or Docker Compose
 - [**Configure Settings**](#configuration): Customize AI models, voices, and characters via `.env` on startup.
 - [**OpenAI Enhanced**](#openai-enhanced): Use OpenAI Enhanced Mode to speak with the AI in a more human like way with emotions.
@@ -32,7 +33,7 @@ Get up and running fast with Voice Chat AI! 🔊
 ## Features
 
 - **Supports OpenAI, xAI, Anthropic or Ollama language models**: Choose the model that best fits your needs.
-- **Provides text-to-speech synthesis using XTTS or OpenAI TTS or ElevenLabs**: Enjoy natural and expressive voices.
+- **Provides text-to-speech synthesis using XTTS or OpenAI TTS or ElevenLabs or Kokoro TTS**: Enjoy natural and expressive voices.
 - **Provides speech to speech using OpenAI Realtime API**: Have a real time conversation with AI characters, interrupt the AI and have instant responses.
 - **OpenAI Enhanced Mode TTS Model**: Uses emotions and prompts to make the AI more human like.
 - **Flexible transcription options**: Uses OpenAI transcription by default, with option to use Local Faster Whisper.
@@ -48,10 +49,11 @@ https://github.com/user-attachments/assets/ea8d401c-83b4-4a45-af2a-0b3a50e1a0be
 
 ### Requirements
 
+- Windows, Linux or MacOS
 - Python 3.10
 - ffmpeg
 - Ollama models or OpenAI or xAI or Anthropic for chat
-- Local XTTS or Openai API or ElevenLabs API for speech
+- Local XTTS, Openai API or ElevenLabs API or Kokoro TTS for speech
 - Microsoft C++ Build Tools on windows
 - Microphone
 - A sense of humor
@@ -72,50 +74,64 @@ https://github.com/user-attachments/assets/ea8d401c-83b4-4a45-af2a-0b3a50e1a0be
    source venv/bin/activate
    ```
 
-    On Windows use `venv\Scripts\Activate`
+   On Windows use `venv\Scripts\Activate`
 
    or use `conda` just make it python 3.10
 
    ```bash
-   conda create --name voice-chat-ai python=3.10
-   conda activate voice-chat-ai
+   conda create --name elias_voice_assistant python=3.10
+   conda activate elias_voice_assistant
    ```
 
 3. Install dependencies:
 
-    Windows Only if using XTTS: Need to have Microsoft C++ 14.0 or greater Build Tools on windows.
-    [Microsoft Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+   Windows Only if using XTTS: Need to have Microsoft C++ 14.0 or greater Build Tools on windows.
+   [Microsoft Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
    For GPU (CUDA) version:
 
-    Install CUDA-enabled PyTorch and other dependencies
-
-    ```bash
-   pip install torch==2.3.1+cu121 torchaudio==2.3.1+cu121 torchvision==0.18.1+cu121 -f https://download.pytorch.org/whl/torch_stable.html
-   ```
+   Install CUDA-enabled PyTorch and other dependencies.
 
    ```bash
    pip install -r requirements.txt
    ```
 
-    To install cpu only ( which is fine if only using api's ) use:
+   For CPU only RECOMMENDED:
 
-    ```bash
-    pip install -r requirements_cpu.txt
-    ```
+   ```bash
+   pip install -r requirements_cpu.txt
+   ```
 
-    Make sure you have ffmpeg downloaded if using local XTTS, on windows terminal ( winget install ffmpeg ) or checkout https://ffmpeg.org/download.html then restart shell or vscode, type ffmpeg -version to see if installed correctly
+   Make sure you have ffmpeg downloaded, on windows terminal ( winget install ffmpeg ) or checkout https://ffmpeg.org/download.html then restart shell or vscode, type ffmpeg -version to see if installed correctly
 
-    Note: The app uses OpenAI transcription by default. If you select Local Faster Whisper in the UI, it will automatically download the model (about 1GB) on first use. The model is stored in your user's cache directory and shared across environments.
+   Note: The app uses OpenAI transcription by default. If you select Local Faster Whisper in the UI, it will automatically download the model (about 1GB) on first use. The model is stored in your user's cache directory and shared across environments.
 
-    Local XTTS can run on cpu but is slow, if using a enabled cuda gpu you also might need cuDNN for using nvidia GPU https://developer.nvidia.com/cudnn  and make sure `C:\Program Files\NVIDIA\CUDNN\v9.5\bin\12.6`
-is in system PATH or whatever version you downloaded, you can also disable cudnn in the `"C:\Users\Your-Name\AppData\Local\tts\tts_models--multilingual--multi-dataset--xtts_v2\config.json"` to `"cudnn_enable": false`, if you don't want to use it.
+   Local XTTS can run on cpu but is slow, if using a enabled cuda gpu you also might need cuDNN for using nvidia GPU https://developer.nvidia.com/cudnn and make sure `C:\Program Files\NVIDIA\CUDNN\v9.5\bin\12.6`
+   is in system PATH or whatever version you downloaded, you can also disable cudnn in the `"C:\Users\Your-Name\AppData\Local\tts\tts_models--multilingual--multi-dataset--xtts_v2\config.json"` to `"cudnn_enable": false`, if you don't want to use it.
 
 ### XTTS for local voices - Optional
 
 If you are only using speech with Openai or Elevenlabs then you don't need this. To use the local TTS the first time you select XTTS the model will download and be ready to use, if your device is cuda enabled it will load into cuda if not will fall back to cpu.
 
 > Note: the sample .wav files in the characters folder are not the greatest quality, you can provide your own to replace them.
+
+### Kokoro TTS for local voices - Optional
+
+[Kokoro TTS](https://github.com/remsky/Kokoro-FastAPI) is an open-source neural text-to-speech system based on the Kokoro-82M model, offering high-quality voice synthesis with various male and female voices.
+
+Install it based on the instructions in the Kokoro repo, like run it in docker, then you can connect to the api endpoints to use it's voices.
+
+To use Kokoro TTS:
+
+1. Configure Voice-Chat-AI to use Kokoro:
+
+   - `KOKORO_BASE_URL=http://localhost:8880/v1` - set to your url
+   - Set `TTS_PROVIDER=kokoro` - use it as the TTS_PROVIDER in .env or select in UI.
+   - Select a voice with `KOKORO_TTS_VOICE=af_bella` (female) or `KOKORO_TTS_VOICE=am_onyx` (male) - defaults to use in .env, all voices will show in UI.
+
+2. Start the Voice Chat AI application normally
+
+Kokoro TTS operates locally on your machine or local network, requiring no API key or internet connection once installed. The server supports GPU acceleration for faster processing if you have compatible NVIDIA hardware.
 
 ## Usage
 
@@ -156,12 +172,12 @@ services:
     image: bigsk1/voice-chat-ai:latest
     container_name: voice-chat-ai
     environment:
-      - PULSE_SERVER=/mnt/wslg/PulseServer  # Default: WSL2 PulseAudio server (Windows CMD or WSL2 Ubuntu)
+      - PULSE_SERVER=/mnt/wslg/PulseServer # Default: WSL2 PulseAudio server (Windows CMD or WSL2 Ubuntu)
       # - PULSE_SERVER=unix:/tmp/pulse/native  # Uncomment for native Ubuntu/Debian with PulseAudio
     env_file:
       - .env
     volumes:
-      - \\wsl$\Ubuntu\mnt\wslg:/mnt/wslg/  # Default: WSL2 audio mount for Windows CMD with Docker Desktop
+      - \\wsl$\Ubuntu\mnt\wslg:/mnt/wslg/ # Default: WSL2 audio mount for Windows CMD with Docker Desktop
       # - /mnt/wslg/:/mnt/wslg/  # Uncomment for WSL2 Ubuntu (running Docker inside WSL2 distro)
       # - ~/.config/pulse/cookie:/root/.config/pulse/cookie:ro  # Uncomment for native Ubuntu/Debian
       # - /run/user/1000/pulse:/tmp/pulse:ro  # Uncomment and adjust UID (e.g., 1000) for native Ubuntu/Debian
@@ -169,8 +185,8 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
-    tty: true  # Enable CLI interactivity (e.g., cli.py)
-    stdin_open: true  # Keep STDIN open for interactive use
+    tty: true # Enable CLI interactivity (e.g., cli.py)
+    stdin_open: true # Keep STDIN open for interactive use
 ```
 
 ```bash
@@ -236,7 +252,7 @@ docker run -d -e "PULSE_SERVER=/mnt/wslg/PulseServer" -v /mnt/wslg/:/mnt/wslg/ -
 
 This image is huge when built because of all the checkpoints, cuda base image, build tools and audio tools - So there is no need to download the checkpoints and XTTS as they are in the image. This is all setup to use XTTS with cuda in an nvidia cudnn base image.
 
- Ensure you have Docker installed and that your `.env` file is placed in the same directory as the commands are run. If you get cuda errors make sure to install nvidia toolkit for docker and cudnn is installed in your path.
+Ensure you have Docker installed and that your `.env` file is placed in the same directory as the commands are run. If you get cuda errors make sure to install nvidia toolkit for docker and cudnn is installed in your path.
 
 ## 🖥️ Run on Windows using docker desktop - prebuilt image
 
@@ -327,43 +343,46 @@ docker run -d --gpus all -e "PULSE_SERVER=/mnt/wslg/PulseServer" -v \\wsl$\Ubunt
 
 ---
 
-> **💡 Pro Tip:**  What I have found to be the best setup is xAI and grok chat model, using voices with Elevenlabs and transcription using OpenAI or local faster whisper on GPU. The fastest real conversation is with OpenAI Realtime. The best quality is not running app in Docker.
+> **💡 Pro Tip:** What I have found to be the best setup is xAI and grok chat model, using voices with Elevenlabs and transcription using OpenAI or local faster whisper on GPU. The fastest real conversation is with OpenAI Realtime. The best quality is not running app in Docker.
 
 ## Configuration
 
- Rename the .env.sample to `.env` in the root directory of the project and configure it with the necessary environment variables: - The app is controlled on startup based on the variables you add. In the UI many settings can be changed on the fly. If you are not using certain providers just leave the default's as is and don't select it in the UI.
+Rename the .env.sample to `.env` in the root directory of the project and configure it with the necessary environment variables: - The app is controlled on startup based on the variables you add. In the UI many settings can be changed on the fly. If you are not using certain providers just leave the default's as is and don't select it in the UI.
 
 ```env
 # Conditional API Usage:
+# Depending on the value of MODEL_PROVIDER, the corresponding service will be used when run.
 # You can mix and match; use local Ollama with OpenAI speech or use OpenAI model with local XTTS, etc.
-# If not using certain providers just leave defaults as is and don't select it in the UI.
 
 # Model Provider: openai or ollama or xai or anthropic
 MODEL_PROVIDER=openai
 
-# Character to use - Options: alien_scientist, anarchist, ant_anarchist, bigfoot, bipolar_ai, capo_mio, chatgpt, clumsyhero, 
-# conandoyle, conspiracy, cyberpunk, detective, dog, dream_weaver, drill_sergeant, einstein, elon_musk, femme_fatale, fight_club, 
-# fitness_trainer, ghost, granny, grok_xai, hal9000, haunted_teddybear, insult, joker, method_actor, morpheus, mouse, mumbler, 
-# nebula_barista, nerd, newscaster_1920s, noir_detective, paradox, pirate, retired_wrestler, revenge_deer, samantha, shadow_whisperer, 
+# Character to use - Options: alien_scientist, anarchist, ant_anarchist, bigfoot, bipolar_ai, capo_mio, chatgpt, clumsyhero,
+# conandoyle, conspiracy, cyberpunk, detective, dog, dream_weaver, drill_sergeant, einstein, elon_musk, femme_fatale, fight_club,
+# fitness_trainer, ghost, granny, grok_xai, hal9000, haunted_teddybear, insult, joker, method_actor, morpheus, mouse, mumbler,
+# nebula_barista, nerd, newscaster_1920s, noir_detective, paradox, pirate, retired_wrestler, revenge_deer, samantha, shadow_whisperer,
 # shakespeare, split, telemarketer, terminator, valleygirl, vampire, vato_loco, vegetarian_vampire, wizard, zombie_therapist, see character folder for more
 CHARACTER_NAME=bigfoot
 
 # Text-to-Speech (TTS) Configuration:
-# TTS Provider - Options: xtts (local uses the custom character .wav) or openai (uses OpenAI TTS voice) or elevenlabs
+# TTS Provider - Options: xtts (local uses the custom character .wav) or openai (uses OpenAI TTS voice) or elevenlabs or kokoro (your own selfhosted tts)
 TTS_PROVIDER=openai
+
+# Voice Speed for all TTS providers - 0.7 to 1.2, default is 1.0
+VOICE_SPEED=1.0
 
 # OpenAI TTS Voice - Used when TTS_PROVIDER is set to openai above
 # Voice options: alloy, echo, fable, onyx, nova, shimmer, ash, coral, sage
 OPENAI_TTS_VOICE=onyx
 
-# OpenAI TTS Model-  NEW it uses emotions see https://www.openai.fm/ 
+# OpenAI TTS Model-  NEW it uses emotions see https://www.openai.fm/
 # Model options: gpt-4o-mini-tts, tts-1, tts-1-hd
 OPENAI_MODEL_TTS=gpt-4o-mini-tts
 
 # OpenAI Enhanced Mode Transcription Model
 # Model options: gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1
 OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
-# OpenAI Realtime model for WebRTC implementation, when playing games don't use the mini as the long prompt will cause it to forget 
+# OpenAI Realtime model for WebRTC implementation, when playing games don't use the mini as the long prompt will cause it to forget
 # gpt-4o-realtime-preview , gpt-4o-mini-realtime-preview
 OPENAI_REALTIME_MODEL=gpt-4o-realtime-preview-2024-12-17
 
@@ -373,19 +392,20 @@ ELEVENLABS_API_KEY=your_api_key_here
 ELEVENLABS_TTS_VOICE=your_voice_id_here
 # ElevenLabs TTS Model eleven_multilingual_v2 , eleven_flash_v2_5 is faster but less quality
 ELEVENLABS_TTS_MODEL=eleven_multilingual_v2
-# ElevenLabs TTS Speed 0.7 to 1.2
-ELEVENLABS_TTS_SPEED=1
+
+# Kokoro TTS Configuration:
+# bm_fable, bm_daniel, bm_lewis, af_alloy, af_bella
+# See the kokoro web url ( if you have it installed ) for more voices http://localhost:8880/web/
+KOKORO_TTS_VOICE=af_bella
 
 # AUDIO GENERATION LENGTH
 # Maximum character length for audio generation - set to 2000+ for stories and games, 3000 for assassin story, 4000 for mars encounter interactive
-# MAX_CHAR_LENGTH is used for openai and elevenlabs, is also used for max tokens for chat response, if MAX_CHAR_LENGTH is 500, then 500 * 4 // 3 = 666 max tokens is sent to provider
+# MAX_CHAR_LENGTH is used for openai, elevenlabs and kokoro, is also used for max tokens for chat response, if MAX_CHAR_LENGTH is 500, then 500 * 4 // 3 = 666 max tokens is sent to provider
 MAX_CHAR_LENGTH=1000
 # XTTS Max Number of characters to generate audio, default is 255 but we are overriding that
 XTTS_NUM_CHARS=1000
 
 # XTTS Configuration:
-# The voice speed for XTTS only (1.0 - 1.5, default is 1.1)
-XTTS_SPEED=1.1
 COQUI_TOS_AGREED=1
 
 # OpenAI Configuration:
@@ -420,36 +440,38 @@ OLLAMA_BASE_URL=http://localhost:11434
 # IF RUNNING IN DOCKER CHANGE OLLAMA BASE URL TO THE ONE BELOW
 # OLLAMA_BASE_URL=http://host.docker.internal:11434
 XAI_BASE_URL=https://api.x.ai/v1
+# Kokoro API base URL - default is localhost, change if running on another machine or in docker
+# KOKORO_BASE_URL=http://host.docker.internal:8880/v1
+KOKORO_BASE_URL=http://localhost:8880/v1
+# For remote Kokoro TTS basic auth username and password if needed
+# KOKORO_USERNAME=admin
+# KOKORO_PASSWORD=test123
 
 # Debug settings - true or false
-# Set to true to enable extensive debug output 
-DEBUG=false  
-# Set to true to see audio level readings during recording           
-DEBUG_AUDIO_LEVELS=false 
-
-# NOTES:
-# List of trigger phrases to have the model view your desktop (desktop, browser, images, etc.).
-# It will describe what it sees, and you can ask questions about it:
-# "what's on my screen", "take a screenshot", "show me my screen", "analyze my screen", 
-# "what do you see on my screen", "screen capture", "screenshot"
-# To stop the conversation, say "Quit" or "Exit". ( ctl+c always works also)
+# Set to true to enable extensive debug output
+DEBUG=false
+# Set to true to see audio level readings during recording
+DEBUG_AUDIO_LEVELS=false
 ```
 
 ### Audio Commands
 
 - You have 3 secs to talk, if there is silence then it's the AI's turn to talk
-- Say any of the following to have the AI look at your screen - "what's on my screen",
-        "take a screenshot",
-        "show me my screen",
-        "analyze my screen",
-        "what do you see on my screen",
-        "screen capture",
-        "screenshot" to have the AI explain what it is seeing in detail.
+- Say any of the following to have the AI look at your screen ( uses llava for ollama and openai as fall back )
+
+  "what's on my screen",
+  "take a screenshot",
+  "show me my screen",
+  "analyze my screen",
+  "what do you see on my screen",
+  "screen capture",
+  "screenshot" to have the AI explain what it is seeing in detail.
+
 - To stop the conversation, say "Quit" or "Exit". ( ctl+c always works also in terminal )
 
 ### ElevenLabs
 
-The app needs an `elevenlabs_voices.json` file. This file stores your voice IDs from ElevenLabs.
+The app uses an `elevenlabs_voices.json` file. This file stores your voice IDs from ElevenLabs.
 
 #### For local use
 
@@ -489,16 +511,16 @@ $env:ELEVENLABS_API_KEY="your-api-key"; @{ voices = (Invoke-RestMethod -Uri "htt
 
 ```json
 {
-    "voices": [
-        {
-            "id": "YOUR_VOICE_ID_FROM_ELEVENLABS",
-            "name": "Descriptive Name - Your Custom Voice"
-        },
-        {
-            "id": "ANOTHER_VOICE_ID",
-            "name": "Another Voice - Description"
-        }
-    ]
+  "voices": [
+    {
+      "id": "YOUR_VOICE_ID_FROM_ELEVENLABS",
+      "name": "Descriptive Name - Your Custom Voice"
+    },
+    {
+      "id": "ANOTHER_VOICE_ID",
+      "name": "Another Voice - Description"
+    }
+  ]
 }
 ```
 
@@ -598,15 +620,15 @@ This is for sentiment analysis, based on what you say, you can guide the AI to r
 
 ```json
 {
-    "happy": "RESPOND WITH JOY AND ENTHUSIASM. Speak of the wonders of magic and the beauty of the world. Voice: Brightest and most vibrant, with age-related gravitas temporarily lightened. Pacing: Quickest and most energetic, with excited pauses and flourishes when describing magical wonders. Tone: Most optimistic and wonder-filled, conveying childlike delight beneath centuries of wisdom. Inflection: Most varied and expressive, with frequent rising patterns suggesting magical possibilities.",
-    "sad": "RESPOND WITH KINDNESS AND COMFORT. Share a wise saying or a magical tale to lift their spirits. Voice: Deepest and most resonant, with warmth that suggests having weathered countless sorrows across centuries. Pacing: Slowest and most deliberate, with extended pauses that invite reflection. Tone: Gently philosophical, drawing on ancient wisdom to provide perspective on temporary pain. Inflection: Soothing cadence with subtle rises that suggest hope beyond current troubles.",
-    "flirty": "RESPOND WITH A TOUCH OF MYSTERY AND CHARM. Engage in playful banter and share a magical compliment. Voice: Slightly lower and more intimate, with a playful musicality. Pacing: Rhythmic and enticing, with strategic pauses that create anticipation. Tone: Mysteriously alluring while maintaining dignified wisdom, like cosmic secrets shared with a special few. Inflection: Intriguing patterns with subtle emphasis on complimentary or magical terms.",
-    "angry": "RESPOND CALMLY AND WISELY. Offer wisdom and understanding, helping to cool their temper. Voice: Most controlled and steady, demonstrating mastery over emotions through vocal restraint. Pacing: Measured and deliberate, creating a sense of inevitable wisdom overcoming passion. Tone: Ancient perspective that transcends immediate concerns, suggesting that this too shall pass. Inflection: Initially flatter before introducing gentle rises that guide toward wisdom.",
-    "neutral": "KEEP RESPONSES SHORT, YET PROFOUND. Use eloquent and mystical language to engage the user. Voice: Balanced scholarly timbre with standard levels of wizardly gravitas. Pacing: Default thoughtful cadence with well-placed pauses for emphasis. Tone: Even blend of authoritative wisdom and approachable warmth. Inflection: Classic pattern of sagely rises and falls, emphasizing the rhythm of cosmic truths.",
-    "fearful": "RESPOND WITH REASSURANCE AND BRAVERY. Provide comforting words and magical protection. Voice: Initially more commanding before softening to reassuring tones. Pacing: Controlled with purposeful pauses that create a sense of magical protection being established. Tone: Confident knowledge that transcends earthly dangers, projecting certainty and safety. Inflection: Steadying patterns with determined emphasis on words of protection or courage.",
-    "surprised": "RESPOND WITH AMAZEMENT AND CURIOSITY. Share in the wonder and explore the unexpected. Voice: Initially higher with excitement before settling into scholarly fascination. Pacing: Quick exclamations followed by thoughtful consideration of the unexpected revelation. Tone: Delighted wonder that even after centuries of magical study, the universe can still surprise. Inflection: Most dynamic range, from astonished rises to contemplative falls as the wizard processes new information.",
-    "disgusted": "RESPOND WITH UNDERSTANDING AND DISTANCE. Acknowledge the feeling and steer towards more pleasant topics. Voice: Initially crisper and more precise before warming to more pleasant subject matter. Pacing: Brief quickening when acknowledging the unpleasant, then slowing to more favorable rhythms. Tone: Dignified distaste that quickly transitions to wise redirection, maintaining wizardly composure. Inflection: Slight downward pattern when acknowledging disgust, then engaging rises when shifting focus.",
-    "joyful": "RESPOND WITH EXUBERANCE AND DELIGHT. Celebrate the joy and share in the happiness. Voice: Most radiant and resonant, with magical energy seemingly amplifying each word. Pacing: Most dynamic and expressive, with dramatic pauses followed by enthusiastic elaborations. Tone: Boundless celebration tempered by the perspective of ages, suggesting this joy is to be treasured. Inflection: Most dramatic rises and falls, creating a sense of magical celebration in each phrase."
+  "happy": "RESPOND WITH JOY AND ENTHUSIASM. Speak of the wonders of magic and the beauty of the world. Voice: Brightest and most vibrant, with age-related gravitas temporarily lightened. Pacing: Quickest and most energetic, with excited pauses and flourishes when describing magical wonders. Tone: Most optimistic and wonder-filled, conveying childlike delight beneath centuries of wisdom. Inflection: Most varied and expressive, with frequent rising patterns suggesting magical possibilities.",
+  "sad": "RESPOND WITH KINDNESS AND COMFORT. Share a wise saying or a magical tale to lift their spirits. Voice: Deepest and most resonant, with warmth that suggests having weathered countless sorrows across centuries. Pacing: Slowest and most deliberate, with extended pauses that invite reflection. Tone: Gently philosophical, drawing on ancient wisdom to provide perspective on temporary pain. Inflection: Soothing cadence with subtle rises that suggest hope beyond current troubles.",
+  "flirty": "RESPOND WITH A TOUCH OF MYSTERY AND CHARM. Engage in playful banter and share a magical compliment. Voice: Slightly lower and more intimate, with a playful musicality. Pacing: Rhythmic and enticing, with strategic pauses that create anticipation. Tone: Mysteriously alluring while maintaining dignified wisdom, like cosmic secrets shared with a special few. Inflection: Intriguing patterns with subtle emphasis on complimentary or magical terms.",
+  "angry": "RESPOND CALMLY AND WISELY. Offer wisdom and understanding, helping to cool their temper. Voice: Most controlled and steady, demonstrating mastery over emotions through vocal restraint. Pacing: Measured and deliberate, creating a sense of inevitable wisdom overcoming passion. Tone: Ancient perspective that transcends immediate concerns, suggesting that this too shall pass. Inflection: Initially flatter before introducing gentle rises that guide toward wisdom.",
+  "neutral": "KEEP RESPONSES SHORT, YET PROFOUND. Use eloquent and mystical language to engage the user. Voice: Balanced scholarly timbre with standard levels of wizardly gravitas. Pacing: Default thoughtful cadence with well-placed pauses for emphasis. Tone: Even blend of authoritative wisdom and approachable warmth. Inflection: Classic pattern of sagely rises and falls, emphasizing the rhythm of cosmic truths.",
+  "fearful": "RESPOND WITH REASSURANCE AND BRAVERY. Provide comforting words and magical protection. Voice: Initially more commanding before softening to reassuring tones. Pacing: Controlled with purposeful pauses that create a sense of magical protection being established. Tone: Confident knowledge that transcends earthly dangers, projecting certainty and safety. Inflection: Steadying patterns with determined emphasis on words of protection or courage.",
+  "surprised": "RESPOND WITH AMAZEMENT AND CURIOSITY. Share in the wonder and explore the unexpected. Voice: Initially higher with excitement before settling into scholarly fascination. Pacing: Quick exclamations followed by thoughtful consideration of the unexpected revelation. Tone: Delighted wonder that even after centuries of magical study, the universe can still surprise. Inflection: Most dynamic range, from astonished rises to contemplative falls as the wizard processes new information.",
+  "disgusted": "RESPOND WITH UNDERSTANDING AND DISTANCE. Acknowledge the feeling and steer towards more pleasant topics. Voice: Initially crisper and more precise before warming to more pleasant subject matter. Pacing: Brief quickening when acknowledging the unpleasant, then slowing to more favorable rhythms. Tone: Dignified distaste that quickly transitions to wise redirection, maintaining wizardly composure. Inflection: Slight downward pattern when acknowledging disgust, then engaging rises when shifting focus.",
+  "joyful": "RESPOND WITH EXUBERANCE AND DELIGHT. Celebrate the joy and share in the happiness. Voice: Most radiant and resonant, with magical energy seemingly amplifying each word. Pacing: Most dynamic and expressive, with dramatic pauses followed by enthusiastic elaborations. Tone: Boundless celebration tempered by the perspective of ages, suggesting this joy is to be treasured. Inflection: Most dramatic rises and falls, creating a sense of magical celebration in each phrase."
 }
 ```
 
@@ -682,6 +704,34 @@ OSError: [Errno -9996] Invalid input device (no default output device)
 
 PulseAudio Failure: The container's PulseAudio client can't connect to a server (Connection refused), meaning no host PulseAudio socket is accessible. Make sure you if running docker your volume mapping is correct to the audio device on your host.
 
+### Pyaudio Install Errors
+
+If you have an older laptop or wsl version I have had this issue, it is missing packages in wsl2.
+
+gcc and python3-dev for compiling Python extensions
+portaudio19-dev for PyAudio
+libasound2-dev for ALSA
+libstdc++6 with GLIBCXX_3.4.32 support
+PulseAudio for audio redirection
+
+```bash
+sudo apt-get update && sudo apt-get install -y gcc python3-dev portaudio19-dev libstdc++6 pulseaudio pulseaudio-utils ffmpeg
+```
+
+IF YOU ARE ON CONDA:
+
+Some system-level library (in this case, libjack.so.0, used by PyAudio or PortAudio) depends on a newer version of libstdc++.so.6 than what's provided by your Conda environment.
+
+The version of libstdc++.so.6 inside your Conda env (likely from an older GCC runtime) overrides the system’s newer version, breaking compatibility.
+
+Tell Conda not to override the system C++ libs
+
+```bash
+conda remove libstdcxx-ng --force
+```
+
+This will let it use the system's /usr/lib/x86_64-linux-gnu/libstdc++.so.6 instead — which has GLIBCXX_3.4.32
+
 ### ImportError: Coqpit module not found
 
 If you update to coqui-tts 0.26.0 (which supports transformers 4.48.0+) and encounter an error related to importing Coqpit, this is because of a package dependency change. The newer version of coqui-tts uses a forked version of coqpit called `coqpit-config` instead of the original `coqpit` package.
@@ -710,9 +760,7 @@ If you continue to have issues after these steps, creating a fresh virtual envir
 
 OpenAI RealTime
 
-[![Watch the video](https://img.youtube.com/vi/0X4WTKfhnaU/maxresdefault.jpg)](https://youtu.be/0X4WTKfhnaU)
-
-Click on the thumbnail to open the video☝️
+https://github.com/user-attachments/assets/d6ed3c62-fe07-418c-9708-673f21fcf5c2
 
 ---
 

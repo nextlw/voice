@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "voice"
+version = "0.1.0"
+description = "Voice chat AI project"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -17,9 +17,10 @@ from .app import (
     init_anthropic_model,
     init_openai_tts_voice,
     init_elevenlabs_tts_voice,
-    init_xtts_speed,
     init_set_tts,
     init_set_provider,
+    init_kokoro_tts_voice,
+    init_voice_speed,
     save_conversation_history,
     send_message_to_clients,
 )
@@ -153,6 +154,7 @@ screenshot_phrases = [
     "screen capture", 
     "screenshot"
 ]
+elai_phrases = ["modo elai", "ativar elai", "elai mode", "activate elai"]
 
 @router.post("/start_conversation")
 async def start_conversation():
@@ -258,6 +260,16 @@ async def conversation_loop():
     # Import with alias to avoid potential shadowing issues
     from .shared import get_current_character as get_character
     
+    # Import Elai bridge
+    try:
+        from .elai_bridge import start_elai_mode, stop_elai_mode, process_elai_command, check_voice_bridge_health
+        elai_available = True
+        elai_mode_active = False
+    except ImportError:
+        elai_available = False
+        elai_mode_active = False
+        print("Elai bridge not available")
+    
     while continue_conversation:
         user_input = await record_audio_and_transcribe() 
         
@@ -287,8 +299,27 @@ async def conversation_loop():
         words = user_input.lower().split()
         if any(phrase.lower().rstrip('.') == word for phrase in quit_phrases for word in words):
             print("Quitting the conversation...")
+            if elai_mode_active and elai_available:
+                await stop_elai_mode()
             await stop_conversation()
             break
+
+        # Check for Elai mode activation
+        if elai_available and any(phrase in user_input.lower() for phrase in elai_phrases):
+            if not elai_mode_active:
+                # Check if Voice Bridge is available
+                if await check_voice_bridge_health():
+                    elai_mode_active = await start_elai_mode()
+                    if elai_mode_active:
+                        chatbot_response = "Modo Elai ativado! Agora seus comandos serão enviados para o agente Elai."
+                    else:
+                        chatbot_response = "Não foi possível ativar o modo Elai."
+                else:
+                    chatbot_response = "O serviço Voice Bridge não está disponível. Inicie o servidor primeiro."
+            else:
+                chatbot_response = "Modo Elai já está ativo."
+            await send_message_to_clients(chatbot_response)
+            continue
 
         # Check for screenshot phrases - match only if the full phrase exists in input
         if any(phrase in user_input.lower() for phrase in screenshot_phrases):
@@ -296,7 +327,12 @@ async def conversation_loop():
             continue
 
         try:
-            chatbot_response = await process_text(user_input)
+            # If in Elai mode, send to Elai instead
+            if elai_mode_active and elai_available:
+                chatbot_response = await process_elai_command(user_input)
+                # Response will be spoken automatically by Elai bridge
+            else:
+                chatbot_response = await process_text(user_input)
         except Exception as e:
             chatbot_response = f"An error occurred: {e}"
             print(chatbot_response)
@@ -320,12 +356,15 @@ def set_env_variable(key: str, value: str):
         init_openai_tts_voice(value)  # Reinitialize OpenAI TTS voice
     if key == "ELEVENLABS_TTS_VOICE":
         init_elevenlabs_tts_voice(value)  # Reinitialize Elevenlabs TTS voice
-    if key == "XTTS_SPEED":
-        init_xtts_speed(value)  # Reinitialize XTTS speed
+    if key == "KOKORO_TTS_VOICE":
+        init_kokoro_tts_voice(value)  # Reinitialize Kokoro TTS voice
+    if key == "VOICE_SPEED":
+        init_voice_speed(value)  # Reinitialize Voice Speed for all TTS providers
     if key == "TTS_PROVIDER":
         init_set_tts(value)      # Reinitialize TTS Providers
     if key == "MODEL_PROVIDER":
         init_set_provider(value)  # Reinitialize Model Providers
+
 
 def adjust_prompt(mood):
     """Load mood-specific prompts from the character's prompts.json file."""

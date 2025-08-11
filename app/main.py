@@ -16,12 +16,15 @@ from .audio_bridge.audio_bridge_router import router as audio_bridge_router
 import logging
 from threading import Thread
 import uuid
+
 from .logger_config import logger  # Import our configured logger
 from contextlib import asynccontextmanager
+
 
 # Configure logging to reduce verbosity of certain modules
 logging.getLogger('aioice.ice').setLevel(logging.WARNING)
 logging.getLogger('aiortc').setLevel(logging.WARNING)
+
 
 # Set up audio bridge
 audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
@@ -89,6 +92,7 @@ class LoggingMiddleware:
         logger.info(f"{client_ip} - \"{request.method} {request.url.path} HTTP/1.1\" {response.status_code}")
         
         return response
+
 
 # Mount static files and templates
 app.mount("/app/static", StaticFiles(directory="app/static"), name="static")
@@ -277,8 +281,9 @@ async def get_index(request: Request):
     openai_tts_voice = os.getenv("OPENAI_TTS_VOICE")
     openai_model = os.getenv("OPENAI_MODEL")
     ollama_model = os.getenv("OLLAMA_MODEL")
-    xtts_speed = os.getenv("XTTS_SPEED")
+    voice_speed = os.getenv("VOICE_SPEED")
     elevenlabs_voice = os.getenv("ELEVENLABS_TTS_VOICE")
+    kokoro_voice = os.getenv("KOKORO_TTS_VOICE")
     faster_whisper_local = os.getenv("FASTER_WHISPER_LOCAL", "true").lower() == "true"
     audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
 
@@ -290,8 +295,9 @@ async def get_index(request: Request):
         "openai_tts_voice": openai_tts_voice,
         "openai_model": openai_model,
         "ollama_model": ollama_model,
-        "xtts_speed": xtts_speed,
+        "voice_speed": voice_speed,
         "elevenlabs_voice": elevenlabs_voice,
+        "kokoro_voice": kokoro_voice,
         "faster_whisper_local": faster_whisper_local,
         "audio_bridge_enabled": audio_bridge_enabled,
     })
@@ -680,10 +686,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 set_env_variable("XAI_MODEL", message["model"])
             elif message["action"] == "set_anthropic_model":
                 set_env_variable("ANTHROPIC_MODEL", message["model"])
-            elif message["action"] == "set_xtts_speed":
-                set_env_variable("XTTS_SPEED", message["speed"])
+            elif message["action"] == "set_voice_speed":
+                set_env_variable("VOICE_SPEED", message["speed"])
             elif message["action"] == "set_elevenlabs_voice":
                 set_env_variable("ELEVENLABS_TTS_VOICE", message["voice"])
+            elif message["action"] == "set_kokoro_voice":
+                set_env_variable("KOKORO_TTS_VOICE", message["voice"])
             elif message["action"] == "clear":
                 conversation_history.clear()
                 await websocket.send_json({"message": "Conversation history cleared."})
@@ -816,6 +824,7 @@ async def get_character_history():
         print(f"Error getting character history: {e}")
         return {"status": "error", "message": str(e)}
 
+
 @app.get("/audio-bridge-test", response_class=HTMLResponse)
 async def get_audio_bridge_test(request: Request):
     audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
@@ -823,6 +832,7 @@ async def get_audio_bridge_test(request: Request):
         "request": request,
         "audio_bridge_enabled": audio_bridge_enabled
     })
+
 
 def signal_handler(sig, frame):
     print('\nShutting down gracefully... Press Ctrl+C again to force exit')

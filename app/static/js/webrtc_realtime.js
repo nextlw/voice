@@ -764,6 +764,42 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
     
+    // Fetch available characters
+    function fetchCharacters() {
+        fetch('/characters')
+            .then(response => response.json())
+            .then(data => {
+                characterSelect.innerHTML = '';
+                
+                // Sort the characters alphabetically
+                data.characters.sort((a, b) => a.localeCompare(b));
+                
+                data.characters.forEach(character => {
+                    const option = document.createElement('option');
+                    option.value = character;
+                    option.textContent = character.replace(/_/g, ' '); // Replace all underscores with spaces
+                    // Seleciona "seu_elias" por padrão
+                    if (character === 'seu_elias') {
+                        option.selected = true;
+                    }
+                    characterSelect.appendChild(option);
+                });
+                
+                // Garante que seu_elias seja selecionado após carregar todos
+                setTimeout(() => {
+                    if (characterSelect.querySelector('option[value="seu_elias"]')) {
+                        characterSelect.value = 'seu_elias';
+                    }
+                }, 100);
+            })
+            .catch(error => {
+                console.error('Error fetching characters:', error);
+                displayMessage("Failed to load characters", "error-message");
+            });
+    }
+
+    fetchCharacters();
+
     // Function to fetch character prompt from server
     async function fetchCharacterPrompt(characterName) {
         debugLog(`Fetching character prompt for: ${characterName}`, "info");

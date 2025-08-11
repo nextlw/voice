@@ -1,7 +1,7 @@
 # CPU-optimized PyTorch and related libraries (no CUDA)
-torch==2.3.1+cpu
-torchaudio==2.3.1+cpu
-torchvision==0.18.1+cpu
+torch==2.7.0
+torchaudio==2.7.0
+torchvision==0.22.0
 -f https://download.pytorch.org/whl/torch_stable.html
 
 PyAudio==0.2.14
@@ -11,7 +11,7 @@ soundfile==0.12.1
 langid==1.1.6
 librosa==0.10.2.post1
 scipy==1.11.4
-transformers==4.48.0
+transformers==4.51.0
 pydantic==2.7.4
 pillow==10.3.0
 
@@ -20,11 +20,13 @@ openai==1.68.2
 anthropic==0.49.0
 textblob==0.18.0.post0
 python-dotenv==1.0.1 
-requests==2.32.3 
+requests==2.32.4 
 fastapi==0.115.11
 uvicorn==0.30.1
+
 aiohttp==3.11.14
 aiohttp_cors==0.8.1
+
 spacy==3.7.5
 spacy-legacy==3.0.12
 spacy-loggers==1.0.5

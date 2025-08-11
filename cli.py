@@ -45,10 +45,13 @@ ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-7-sonnet-20250219')
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 ELEVENLABS_TTS_VOICE = os.getenv('ELEVENLABS_TTS_VOICE')
 ELEVENLABS_TTS_MODEL = os.getenv('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2')
-ELEVENLABS_TTS_SPEED = os.getenv('ELEVENLABS_TTS_SPEED', '1')
+KOKORO_BASE_URL = os.getenv('KOKORO_BASE_URL', 'http://localhost:8880/v1')
+KOKORO_TTS_VOICE = os.getenv('KOKORO_TTS_VOICE', 'af_bella')
 MAX_CHAR_LENGTH = int(os.getenv('MAX_CHAR_LENGTH', 500))
+
 SILENCE_DURATION_SECONDS = float(os.getenv("SILENCE_DURATION_SECONDS", "2.0"))
 XTTS_SPEED = os.getenv('XTTS_SPEED', '1.1') 
+
 os.environ["COQUI_TOS_AGREED"] = "1"
 
 
@@ -177,7 +180,7 @@ print(f"Model provider: {MODEL_PROVIDER}")
 print(f"Model: {OPENAI_MODEL if MODEL_PROVIDER == 'openai' else XAI_MODEL if MODEL_PROVIDER == 'xai' else ANTHROPIC_MODEL if MODEL_PROVIDER == 'anthropic' else OLLAMA_MODEL}")
 print(f"Character: {character_display_name}")
 print(f"Text-to-Speech provider: {TTS_PROVIDER}")
-print(f"Text-to-Speech model: {OPENAI_MODEL_TTS if TTS_PROVIDER == 'openai' else ELEVENLABS_TTS_MODEL if TTS_PROVIDER == 'elevenlabs' else 'local' if TTS_PROVIDER == 'xtts' else 'Unknown'}")
+print(f"Text-to-Speech model: {OPENAI_MODEL_TTS if TTS_PROVIDER == 'openai' else ELEVENLABS_TTS_MODEL if TTS_PROVIDER == 'elevenlabs' else 'kokoro-tts' if TTS_PROVIDER == 'kokoro' else 'local' if TTS_PROVIDER == 'xtts' else 'Unknown'}")
 print("To stop chatting say Quit or Exit. One moment please loading...")
 
 # Function to synthesize speech using XTTS
@@ -203,6 +206,15 @@ def process_and_play(prompt, audio_file_pth):
             play_audio(temp_wav_path)
         else:
             print("Error: Audio file not found.")
+    elif TTS_PROVIDER == 'kokoro':
+        output_path = os.path.join(output_dir, 'output.wav')
+        kokoro_text_to_speech(prompt, output_path)
+        print(f"Generated audio file at: {output_path}")
+        if os.path.exists(output_path):
+            print("Playing generated audio...")
+            play_audio(output_path)
+        else:
+            print("Error: Audio file not found.")
     elif TTS_PROVIDER == 'xtts':
         if tts is not None:
             try:
@@ -210,7 +222,7 @@ def process_and_play(prompt, audio_file_pth):
                     text=prompt,
                     speaker_wav=audio_file_pth,  # For voice cloning
                     language="en",
-                    speed=float(XTTS_SPEED)
+                    speed=float(VOICE_SPEED)
                 )
                 src_path = os.path.join(output_dir, 'output.wav')
                 sf.write(src_path, wav, tts.synthesizer.tts_config.audio["sample_rate"])
@@ -278,6 +290,7 @@ def openai_text_to_speech(prompt, output_path):
                 json={
                     "model": OPENAI_MODEL_TTS,
                     "voice": OPENAI_TTS_VOICE,
+                    "speed": float(VOICE_SPEED),
                     "input": prompt,
                     "response_format": file_extension
                 },
@@ -312,7 +325,7 @@ def elevenlabs_text_to_speech(text, output_path):
             "similarity_boost": 0.8,
             "style": 0.0,
             "use_speaker_boost": True,
-            "speed": ELEVENLABS_TTS_SPEED
+            "speed": float(VOICE_SPEED)
         }
     }
 
@@ -325,6 +338,53 @@ def elevenlabs_text_to_speech(text, output_path):
         print("Audio stream saved successfully.")
     else:
         print("Error generating speech:", response.text)
+
+def kokoro_text_to_speech(text, output_path):
+    """Convert text to speech using Kokoro TTS API."""
+    try:
+        # Define the API endpoint
+        kokoro_url = f"{KOKORO_BASE_URL}/audio/speech"
+        
+        # Prepare payload with the format expected by Kokoro API
+        payload = {
+            "model": "kokoro",
+            "voice": KOKORO_TTS_VOICE,
+            "input": text,
+            "response_format": "wav",  # Use wav format for more compatibility
+            "speed": float(VOICE_SPEED)  # Use the global VOICE_SPEED parameter
+        }
+        
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        # Add Basic Auth if credentials are provided
+        kokoro_username = os.getenv("KOKORO_USERNAME", "")
+        kokoro_password = os.getenv("KOKORO_PASSWORD", "")
+        
+        if kokoro_username and kokoro_password:
+            import base64
+            auth_str = f"{kokoro_username}:{kokoro_password}"
+            auth_bytes = auth_str.encode('ascii')
+            base64_auth = base64.b64encode(auth_bytes).decode('ascii')
+            headers["Authorization"] = f"Basic {base64_auth}"
+        
+        # Make the request with SSL verification disabled
+        response = requests.post(kokoro_url, json=payload, headers=headers, timeout=30, verify=False)
+        
+        if response.status_code == 200:
+            # Save the audio data to file
+            with open(output_path, 'wb') as f:
+                f.write(response.content)
+            
+            print("Audio generated successfully with Kokoro.")
+            return True
+        else:
+            print(f"Error from Kokoro API: HTTP {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error during Kokoro TTS generation: {e}")
+        return False
 
 def sanitize_response(response):
     # Remove asterisks and emojis
@@ -603,6 +663,8 @@ def chatgpt_streamed(user_input, system_message, mood_prompt, conversation_histo
                     chunk = json.loads(line)
                     delta_content = chunk['choices'][0]['delta'].get('content', '')
                     if delta_content:
+                        # Clean the weird characters before printing
+                        delta_content = delta_content.replace('â\x80\x99', "'")
                         print(NEON_GREEN + delta_content + RESET_COLOR, end='', flush=True)
                         full_response += delta_content
                 except json.JSONDecodeError:
@@ -709,7 +771,7 @@ def record_audio(file_path, silence_threshold=512, silence_duration=SILENCE_DURA
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=chunk_size)
     frames = []
-    print("Recording...")
+    print(f"{PINK}Recording...{RESET_COLOR}")
     silent_chunks = 0
     speaking_chunks = 0
     while True:
@@ -740,9 +802,9 @@ def execute_once(question_prompt):
     
     # Determine the audio file format based on the TTS provider
     if TTS_PROVIDER == 'elevenlabs':
-        temp_audio_path = os.path.join(output_dir, 'temp_audio.mp3')  
+        temp_audio_path = os.path.join(output_dir, 'temp_audio.mp3')
     else:
-        temp_audio_path = os.path.join(output_dir, 'temp_audio.wav')  
+        temp_audio_path = os.path.join(output_dir, 'temp_audio.wav')
 
     image_path = take_screenshot(temp_image_path)
     response = analyze_image(image_path, question_prompt)
@@ -799,6 +861,7 @@ def analyze_image(image_path, question_prompt):
             response = requests.post(f'{OLLAMA_BASE_URL}/api/generate', headers=headers, json=payload, timeout=20)
             print(f"Response status code: {response.status_code}")  # Debugging statement
             if response.status_code == 200:
+                print("Using ollama for image analysis")
                 return {"choices": [{"message": {"content": response.json().get('response', 'No response received.')}}]}
             elif response.status_code == 404:
                 return {"choices": [{"message": {"content": "The llava model is not available on this server."}}]}
@@ -818,11 +881,11 @@ def analyze_image(image_path, question_prompt):
             "role": "user",
             "content": [
                 {"type": "text", "text": question_prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "low"}}
+                {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "high"}}
             ]
         }
         payload = {
-            "model": XAI_MODEL,
+            "model": "grok-2-vision-1212",
             "temperature": 0.5,
             "messages": [message],
             "max_tokens": 1000
@@ -831,6 +894,7 @@ def analyze_image(image_path, question_prompt):
         try:
             response = requests.post(f"{XAI_BASE_URL}/chat/completions", headers=headers, json=payload, timeout=30)
             if response.status_code == 200:
+                print("Using xAI for image analysis")
                 return response.json()
             else:
                 print("XAI image analysis failed or not supported, falling back to OpenAI")
@@ -853,7 +917,7 @@ def analyze_image_with_openai(encoded_image, question_prompt):
         "role": "user",
         "content": [
             {"type": "text", "text": question_prompt},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "low"}}
+            {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "high"}}
         ]
     }
     payload = {
@@ -865,6 +929,7 @@ def analyze_image_with_openai(encoded_image, question_prompt):
     try:
         response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
         response.raise_for_status()
+        print("Using OpenAI for image analysis")
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"OpenAI request failed: {e}")
@@ -880,6 +945,7 @@ def generate_speech(text, temp_audio_path):
         payload = {
             "model": OPENAI_MODEL_TTS,
             "voice": OPENAI_TTS_VOICE,
+            "speed": float(VOICE_SPEED),
             "input": text,
             "response_format": "wav"
         }
@@ -891,6 +957,8 @@ def generate_speech(text, temp_audio_path):
             print(f"Failed to generate speech: {response.status_code} - {response.text}")
     elif TTS_PROVIDER == 'elevenlabs':
         elevenlabs_text_to_speech(text, temp_audio_path)
+    elif TTS_PROVIDER == 'kokoro':
+        kokoro_text_to_speech(text, temp_audio_path)
     else:  # XTTS
         if tts is not None:
             try:
@@ -898,7 +966,7 @@ def generate_speech(text, temp_audio_path):
                     text=text,
                     speaker_wav=character_audio_file,
                     language="en",
-                    speed=float(XTTS_SPEED)
+                    speed=float(VOICE_SPEED)
                 )
                 sf.write(temp_audio_path, wav, tts.synthesizer.tts_config.audio["sample_rate"])
                 print("Audio generated successfully with XTTS.")

@@ -17,10 +17,11 @@ document.addEventListener("DOMContentLoaded", function() {
     const ttsSelect = document.getElementById('tts-select');
     const openaiVoiceSelect = document.getElementById('openai-voice-select');
     const elevenLabsVoiceSelect = document.getElementById('elevenlabs-voice-select');
+    const kokoroVoiceSelect = document.getElementById('kokoro-voice-select');
     const openaiModelSelect = document.getElementById('openai-model-select');
     const ollamaModelSelect = document.getElementById('ollama-model-select');
     const xaiModelSelect = document.getElementById('xai-model-select');
-    const xttsSpeedSelect = document.getElementById('xtts-speed-select');
+    const voiceSpeedSelect = document.getElementById('voice-speed-select');
     const transcriptionSelect = document.getElementById('transcription-select');
 
     let aiMessageQueue = [];
@@ -149,18 +150,13 @@ document.addEventListener("DOMContentLoaded", function() {
         characters.forEach(character => {
             const option = document.createElement('option');
             option.value = character;
-            
-            // Fix the display name to handle potential encoding issues
-            let displayName = character;
-            try {
-                // Replace underscores with spaces and capitalize first letter of each word
-                displayName = character.replace(/_/g, ' ')
-                    .replace(/\b\w/g, c => c.toUpperCase());
-            } catch (e) {
-                console.warn(`Error formatting character name: ${character}`, e);
+
+            option.textContent = character.replace(/_/g, ' '); // Replace all underscores with spaces
+            // Seleciona "seu_elias" por padrão
+            if (character === 'seu_elias') {
+                option.selected = true;
             }
-            
-            option.textContent = displayName;
+
             characterSelect.appendChild(option);
         });
         
@@ -467,14 +463,19 @@ document.addEventListener("DOMContentLoaded", function() {
         websocket.send(JSON.stringify({ action: "set_anthropic_model", model: selectedModel }));
     }
 
-    function setXTTSSpeed() {
-        const selectedSpeed = document.getElementById('xtts-speed-select').value;
-        websocket.send(JSON.stringify({ action: "set_xtts_speed", speed: selectedSpeed }));
+    function setVoiceSpeed() {
+        const selectedSpeed = document.getElementById('voice-speed-select').value;
+        websocket.send(JSON.stringify({ action: "set_voice_speed", speed: selectedSpeed }));
     }
 
     function setElevenLabsVoice() {
         const selectedVoice = document.getElementById('elevenlabs-voice-select').value;
         websocket.send(JSON.stringify({ action: "set_elevenlabs_voice", voice: selectedVoice }));
+    }
+
+    function setKokoroVoice() {
+        const selectedVoice = document.getElementById('kokoro-voice-select').value;
+        websocket.send(JSON.stringify({ action: "set_kokoro_voice", voice: selectedVoice }));
     }
 
     characterSelect.addEventListener('change', function() {
@@ -576,8 +577,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if (anthropicModelSelect) {
         anthropicModelSelect.addEventListener('change', setAnthropicModel);
     }
-    xttsSpeedSelect.addEventListener('change', setXTTSSpeed);
+    voiceSpeedSelect.addEventListener('change', setVoiceSpeed);
     elevenLabsVoiceSelect.addEventListener('change', setElevenLabsVoice);
+    kokoroVoiceSelect.addEventListener('change', setKokoroVoice);
 
     transcriptionSelect.addEventListener('change', function() {
         fetch('/set_transcription_model', {
@@ -642,6 +644,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     loadThemePreference();
     setDarkModeDefault();
+
 
     // Initialize audio bridge status checking
     let lastStatusCheckTime = 0;

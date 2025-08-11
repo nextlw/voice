@@ -25,7 +25,6 @@ from .shared import clients, get_current_character
 from .stream_helpers import stream_openai_response
 import time
 
-
 import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)  # transformers 4.48+ warning
 
@@ -60,9 +59,12 @@ ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-7-sonnet-20250219')
 ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
 ELEVENLABS_TTS_VOICE = os.getenv('ELEVENLABS_TTS_VOICE')
 ELEVENLABS_TTS_MODEL = os.getenv('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2')
-ELEVENLABS_TTS_SPEED = os.getenv('ELEVENLABS_TTS_SPEED', '1')
+KOKORO_BASE_URL = os.getenv('KOKORO_BASE_URL', 'http://localhost:8880/v1')
+KOKORO_TTS_VOICE = os.getenv('KOKORO_TTS_VOICE', 'af_bella')
 MAX_CHAR_LENGTH = int(os.getenv('MAX_CHAR_LENGTH', 500))
-XTTS_SPEED = os.getenv('XTTS_SPEED', '1.1') 
+
+VOICE_SPEED = os.getenv('VOICE_SPEED', '1.0')
+
 XTTS_NUM_CHARS = int(os.getenv('XTTS_NUM_CHARS', 255))
 SILENCE_DURATION_SECONDS = float(os.getenv("SILENCE_DURATION_SECONDS", "2.0"))
 os.environ["COQUI_TOS_AGREED"] = "1"
@@ -72,6 +74,7 @@ PINK = '\033[95m'
 CYAN = '\033[96m'
 YELLOW = '\033[93m'
 NEON_GREEN = '\033[92m'
+BLUE = '\033[94m'
 RESET_COLOR = '\033[0m'
 
 # Initialize OpenAI API key if available
@@ -118,7 +121,7 @@ if FASTER_WHISPER_LOCAL:
         whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8")
         print("Faster-Whisper initialized on CPU successfully.")
 else:
-    print("Faster-Whisper initialization skipped (FASTER_WHISPER_LOCAL=false). Will use OpenAI API for transcription or load on demand.")
+    print("Faster-Whisper initialization skipped. Using OpenAI for transcription or load on demand.")
 
 # Paths for character-specific files
 project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -177,10 +180,15 @@ def init_elevenlabs_tts_voice(voice_name):
     ELEVENLABS_TTS_VOICE = voice_name
     print(f"Switched to ElevenLabs TTS voice: {voice_name}")
 
-def init_xtts_speed(speed_value):
-    global XTTS_SPEED
-    XTTS_SPEED = speed_value
-    print(f"Switched to XTTS speed: {speed_value}")
+def init_kokoro_tts_voice(voice_name):
+    global KOKORO_TTS_VOICE
+    KOKORO_TTS_VOICE = voice_name
+    print(f"Switched to Kokoro TTS voice: {voice_name}")
+
+def init_voice_speed(speed_value):
+    global VOICE_SPEED
+    VOICE_SPEED = speed_value
+    print(f"Switched to global voice speed: {speed_value}")
 
 def init_set_tts(set_tts):
     global TTS_PROVIDER, tts
@@ -277,12 +285,12 @@ static_output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'st
 os.makedirs(output_dir, exist_ok=True)
 os.makedirs(static_output_dir, exist_ok=True)
 
-print(f"Using device: {device}")
-print(f"Model provider: {MODEL_PROVIDER}")
-print(f"Model: {OPENAI_MODEL if MODEL_PROVIDER == 'openai' else XAI_MODEL if MODEL_PROVIDER == 'xai' else ANTHROPIC_MODEL if MODEL_PROVIDER == 'anthropic' else OLLAMA_MODEL}")
-print(f"Character: {character_display_name}")
-print(f"Text-to-Speech provider: {TTS_PROVIDER}")
-print("To stop chatting say Quit or Exit. One moment please loading...")
+print(f"{NEON_GREEN}Using device: {device}{RESET_COLOR}")
+print(f"{NEON_GREEN}Model provider: {MODEL_PROVIDER}{RESET_COLOR}")
+print(f"{NEON_GREEN}Model: {OPENAI_MODEL if MODEL_PROVIDER == 'openai' else XAI_MODEL if MODEL_PROVIDER == 'xai' else ANTHROPIC_MODEL if MODEL_PROVIDER == 'anthropic' else OLLAMA_MODEL}{RESET_COLOR}")
+print(f"{NEON_GREEN}Character: {character_display_name}{RESET_COLOR}")
+print(f"{NEON_GREEN}Text-to-Speech provider: {TTS_PROVIDER}{RESET_COLOR}")
+print(f"To stop chatting say Quit or Exit. One moment please loading...")
 
 async def process_and_play(prompt, audio_file_pth, remote_playback=False):
     # Always get the current character name to ensure we have the right audio file
@@ -410,16 +418,34 @@ async def process_and_play(prompt, audio_file_pth, remote_playback=False):
                 "action": "error",
                 "message": "ElevenLabs audio file not found after generation"
             }))
+    elif TTS_PROVIDER == 'kokoro':
+        output_path = os.path.join(output_dir, 'output.wav')
+        success = await kokoro_text_to_speech(prompt, output_path)
+        if success and os.path.exists(output_path):
+            print("Playing generated audio...")
+            await send_message_to_clients(json.dumps({"action": "ai_start_speaking"}))
+            await play_audio(output_path)
+            await send_message_to_clients(json.dumps({"action": "ai_stop_speaking"}))
+        elif not success:
+            print("Failed to generate Kokoro audio.")
+        else:
+            print("Error: Kokoro audio file not found after generation.")
+            await send_message_to_clients(json.dumps({
+                "action": "error",
+                "message": "Kokoro audio file not found after generation"
+            }))
     elif TTS_PROVIDER == 'xtts':
         if tts is not None:
             try:
                 wav = await asyncio.to_thread(
-                    tts.tts,
-                    text=prompt,
-                    speaker_wav=current_audio_file,  # Use the updated current character audio
-                    language="en",
-                    speed=float(XTTS_SPEED)
-                )
+
+                tts.tts,
+                text=prompt,
+                speaker_wav=current_audio_file,  # Use the updated current character audio
+                language="en",
+                speed=float(os.getenv('VOICE_SPEED', '1.0'))
+            )
+
                 src_path = os.path.join(output_dir, 'output.wav')
                 sf.write(src_path, wav, tts.synthesizer.tts_config.audio["sample_rate"])
                 print("Audio generated successfully with XTTS.")
@@ -503,6 +529,8 @@ def save_pcm_as_wav(pcm_data: bytes, file_path: str, sample_rate: int = 24000, c
 async def openai_text_to_speech(prompt, output_path):
     file_extension = Path(output_path).suffix.lstrip('.').lower()
 
+    voice_speed = float(os.getenv("VOICE_SPEED", "1.0"))
+
     async with aiohttp.ClientSession() as session:
         if file_extension == 'wav':
             pcm_data = await fetch_pcm_audio(OPENAI_MODEL_TTS, OPENAI_TTS_VOICE, prompt, OPENAI_TTS_URL, session)
@@ -512,7 +540,7 @@ async def openai_text_to_speech(prompt, output_path):
                 async with session.post(
                     url=OPENAI_TTS_URL,
                     headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-                    json={"model": OPENAI_MODEL_TTS, "voice": OPENAI_TTS_VOICE, "input": prompt, "response_format": file_extension},
+                    json={"model": OPENAI_MODEL_TTS, "voice": OPENAI_TTS_VOICE, "input": prompt, "response_format": file_extension, "speed": voice_speed},
                     timeout=30
                 ) as response:
                     response.raise_for_status()
@@ -547,6 +575,9 @@ async def elevenlabs_text_to_speech(text, output_path):
     CHUNK_SIZE = 1024
     tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_TTS_VOICE}/stream"
 
+    # Get global voice speed from environment (default to 1.0)
+    voice_speed = os.getenv("VOICE_SPEED", "1.0")
+
     headers = {
         "Accept": "application/json",
         "xi-api-key": ELEVENLABS_API_KEY
@@ -560,7 +591,7 @@ async def elevenlabs_text_to_speech(text, output_path):
             "similarity_boost": 0.8,
             "style": 0.0,
             "use_speaker_boost": True,
-            "speed": ELEVENLABS_TTS_SPEED
+            "speed": voice_speed
         }
     }
 
@@ -862,7 +893,10 @@ def chatgpt_streamed(user_input, system_message, mood_prompt, conversation_histo
                     try:
                         chunk = json.loads(line)
                         delta_content = chunk['choices'][0]['delta'].get('content', '')
+                        # print(f"Raw delta_content: {repr(delta_content)}")
                         if delta_content:
+                            # Clean the weird characters
+                            delta_content = delta_content.replace('â\x80\x99', "'")
                             line_buffer += delta_content
                             if '\n' in line_buffer:
                                 lines = line_buffer.split('\n')
@@ -1411,6 +1445,9 @@ async def execute_once(question_prompt):
     if TTS_PROVIDER == 'elevenlabs':
         temp_audio_path = os.path.join(output_dir, 'temp_audio.mp3')  # Use mp3 for ElevenLabs
         max_char_length = MAX_CHAR_LENGTH  # Set a higher limit for ElevenLabs
+    elif TTS_PROVIDER == 'kokoro':
+        temp_audio_path = os.path.join(output_dir, 'temp_audio.wav')  # Use wav for Kokoro
+        max_char_length = MAX_CHAR_LENGTH  # Set a higher limit for Kokoro
     elif TTS_PROVIDER == 'openai':
         temp_audio_path = os.path.join(output_dir, 'temp_audio.wav')  # Use wav for OpenAI
         max_char_length = MAX_CHAR_LENGTH  # Set a higher limit for OpenAI
@@ -1440,13 +1477,34 @@ async def execute_once(question_prompt):
         await play_audio(temp_audio_path)
 
     os.remove(image_path)
+    return text_response
 
 async def execute_screenshot_and_analyze():
+    # Import the necessary modules at the beginning of the function
+    from .shared import get_current_character, conversation_history
+    from .app_logic import save_conversation_history as save_conversation_history_app, save_character_specific_history as save_character_specific_history_app
+    
     question_prompt = "What do you see in this image? Keep it short but detailed and answer any follow up questions about it"
     print("Taking screenshot and analyzing...")
-    await execute_once(question_prompt)
-    print("\nReady for the next question....")
+    text_response = await execute_once(question_prompt)
     
+    # Add the AI's response to the conversation history
+    conversation_history.append({"role": "assistant", "content": text_response})
+    
+    # Save the updated conversation history
+    current_character = get_current_character()
+    is_story_character = current_character.startswith("story_") or current_character.startswith("game_")
+    
+    if is_story_character:
+        save_character_specific_history_app(conversation_history, current_character)
+    else:
+        save_conversation_history_app(conversation_history)
+    
+    # Send the response to any connected websocket clients
+    await send_message_to_clients(f"{current_character}: {text_response}")
+    
+    print("\nReady for the next question....")
+
 async def take_screenshot(temp_image_path):
     await asyncio.sleep(5)
     screenshot = ImageGrab.grab()
@@ -1476,6 +1534,7 @@ async def analyze_image(image_path, question_prompt):
                 async with session.post(f'{OLLAMA_BASE_URL}/api/generate', headers=headers, json=payload, timeout=30) as response:
                     print(f"Response status code: {response.status}")
                     if response.status == 200:
+                        print("Using ollama for image analysis")
                         response_json = await response.json()
                         return {"choices": [{"message": {"content": response_json.get('response', 'No response received.')}}]}
                     elif response.status == 404:
@@ -1487,7 +1546,6 @@ async def analyze_image(image_path, question_prompt):
             return {"choices": [{"message": {"content": "Failed to process the image with the llava model."}}]}
     
     elif MODEL_PROVIDER == 'xai':
-        # First, try XAI's image analysis if it's supported
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {XAI_API_KEY}"
@@ -1496,11 +1554,11 @@ async def analyze_image(image_path, question_prompt):
             "role": "user",
             "content": [
                 {"type": "text", "text": question_prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "low"}}
+                {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "high"}}
             ]
         }
         payload = {
-            "model": XAI_MODEL,
+            "model": "grok-2-vision-1212",
             "temperature": 0.5,
             "messages": [message],
             "max_tokens": 1000
@@ -1510,9 +1568,10 @@ async def analyze_image(image_path, question_prompt):
             async with aiohttp.ClientSession() as session:
                 async with session.post(f"{XAI_BASE_URL}/chat/completions", headers=headers, json=payload, timeout=30) as response:
                     if response.status == 200:
+                        print("Using xAI for image analysis")
                         return await response.json()
                     else:
-                        # If XAI doesn't support image analysis or returns an error,
+                        # If XAI returns an error,
                         # fall back to OpenAI's image analysis
                         print("XAI image analysis failed or not supported, falling back to OpenAI")
                         return await fallback_to_openai_image_analysis(encoded_image, question_prompt)
@@ -1533,7 +1592,7 @@ async def fallback_to_openai_image_analysis(encoded_image, question_prompt):
         "role": "user",
         "content": [
             {"type": "text", "text": question_prompt},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "low"}}
+            {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{encoded_image}", "detail": "high"}}
         ]
     }
     payload = {
@@ -1547,6 +1606,7 @@ async def fallback_to_openai_image_analysis(encoded_image, question_prompt):
         async with aiohttp.ClientSession() as session:
             async with session.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30) as response:
                 response.raise_for_status()
+                print("Using OpenAI for image analysis")
                 return await response.json()
     except aiohttp.ClientError as e:
         print(f"OpenAI fallback request failed: {e}")
@@ -1556,7 +1616,7 @@ async def fallback_to_openai_image_analysis(encoded_image, question_prompt):
 async def generate_speech(text, temp_audio_path):
     if TTS_PROVIDER == 'openai':
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {OPENAI_API_KEY}"}
-        payload = {"model": OPENAI_MODEL_TTS, "voice": OPENAI_TTS_VOICE, "input": text, "response_format": "wav"}
+        payload = {"model": OPENAI_MODEL_TTS, "voice": OPENAI_TTS_VOICE, "speed": float(VOICE_SPEED), "input": text, "response_format": "wav"}
         async with aiohttp.ClientSession() as session:
             async with session.post(OPENAI_TTS_URL, headers=headers, json=payload, timeout=30) as response:
                 if response.status == 200:
@@ -1567,6 +1627,9 @@ async def generate_speech(text, temp_audio_path):
 
     elif TTS_PROVIDER == 'elevenlabs':
         await elevenlabs_text_to_speech(text, temp_audio_path)
+    
+    elif TTS_PROVIDER == 'kokoro':
+        await kokoro_text_to_speech(text, temp_audio_path)
 
     else:  # XTTS
         if tts is not None:
@@ -1576,7 +1639,7 @@ async def generate_speech(text, temp_audio_path):
                     text=text,
                     speaker_wav=character_audio_file,
                     language="en",
-                    speed=float(os.getenv('XTTS_SPEED', '1.1'))
+                    speed=float(os.getenv('VOICE_SPEED', '1.0'))
                 )
                 sf.write(temp_audio_path, wav, tts.synthesizer.tts_config.audio["sample_rate"])
                 print("Audio generated successfully with XTTS.")
@@ -1584,6 +1647,68 @@ async def generate_speech(text, temp_audio_path):
                 print(f"Error during XTTS audio generation: {e}")
         else:
             print("XTTS model is not loaded.")
+
+async def kokoro_text_to_speech(text, output_path):
+    """Convert text to speech using Kokoro TTS API."""
+    try:
+        # Using direct aiohttp request
+        kokoro_url = f"{KOKORO_BASE_URL}/audio/speech"
+        
+        # Get voice speed from environment
+        voice_speed = float(os.getenv("VOICE_SPEED", "1.0"))
+        
+        # Prepare payload with the format expected by Kokoro API
+        payload = {
+            "model": "kokoro",
+            "voice": KOKORO_TTS_VOICE,
+            "input": text,
+            "response_format": "wav",  # Use wav format for more compatibility
+            "speed": voice_speed
+        }
+        
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        # Add Basic Auth if credentials are provided
+        kokoro_username = os.getenv("KOKORO_USERNAME", "")
+        kokoro_password = os.getenv("KOKORO_PASSWORD", "")
+        
+        if kokoro_username and kokoro_password:
+            import base64
+            auth_str = f"{kokoro_username}:{kokoro_password}"
+            auth_bytes = auth_str.encode('ascii')
+            base64_auth = base64.b64encode(auth_bytes).decode('ascii')
+            headers["Authorization"] = f"Basic {base64_auth}"
+        
+        # Make the request with SSL verification disabled
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.post(kokoro_url, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    # Save the audio data to file
+                    with open(output_path, 'wb') as f:
+                        async for chunk in response.content.iter_chunked(1024):
+                            f.write(chunk)
+                    
+                    print("Audio generated successfully with Kokoro.")
+                    return True
+                else:
+                    error_text = await response.text()
+                    print(f"Error from Kokoro API: HTTP {response.status} - {error_text}")
+                    await send_message_to_clients(json.dumps({
+                        "action": "error",
+                        "message": f"Kokoro TTS error: HTTP {response.status}"
+                    }))
+                    return False
+                
+    except Exception as e:
+        print(f"Error during Kokoro TTS generation: {e}")
+        await send_message_to_clients(json.dumps({
+            "action": "error",
+            "message": f"Kokoro TTS error: {str(e)}"
+        }))
+        return False
 
 async def user_chatbot_conversation():
     # Track previous character
