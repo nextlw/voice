@@ -23,11 +23,16 @@ python-dotenv==1.0.1
 requests==2.32.4 
 fastapi==0.115.11
 uvicorn==0.30.1
-aiohttp==3.12.14
+
+aiohttp==3.11.14
+aiohttp_cors==0.8.1
+
 spacy==3.7.5
 spacy-legacy==3.0.12
 spacy-loggers==1.0.5
 coqui-tts==0.26.0
+python-multipart
+aiofiles==24.1.0
 
 # WebRTC-specific dependencies
 aiortc==1.10.1

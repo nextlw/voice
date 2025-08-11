@@ -7,51 +7,100 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPExcept
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, JSONResponse
 from starlette.background import BackgroundTask
 from .shared import clients, set_current_character, conversation_history, add_client, remove_client
 from .app_logic import start_conversation, stop_conversation, set_env_variable, save_conversation_history, characters_folder, set_transcription_model, fetch_ollama_models, load_character_prompt, save_character_specific_history
 from .enhanced_logic import start_enhanced_conversation, stop_enhanced_conversation
+from .audio_bridge.audio_bridge_router import router as audio_bridge_router
 import logging
 from threading import Thread
 import uuid
-import aiohttp
-import shutil
+
+from .logger_config import logger  # Import our configured logger
+from contextlib import asynccontextmanager
 
 
-def center_banner(banner_text: str) -> str:
-    terminal_width = shutil.get_terminal_size((80, 20)).columns  # fallback = 80
-    centered_lines = []
-    for line in banner_text.splitlines():
-        centered_line = line.center(terminal_width)
-        centered_lines.append(centered_line)
-    return "\n".join(centered_lines)
+# Configure logging to reduce verbosity of certain modules
+logging.getLogger('aioice.ice').setLevel(logging.WARNING)
+logging.getLogger('aiortc').setLevel(logging.WARNING)
 
-def display_banner():
-    raw_banner = f"""
 
- ▌ ▐·      ▪   ▄▄· ▄▄▄ .     ▄▄·  ▄ .▄ ▄▄▄· ▄▄▄▄▄     ▄▄▄· ▪  
-▪█·█▌▪     ██ ▐█ ▌▪▀▄.▀·    ▐█ ▌▪██▪▐█▐█ ▀█ •██      ▐█ ▀█ ██ 
-▐█▐█• ▄█▀▄ ▐█·██ ▄▄▐▀▀▪▄    ██ ▄▄██▀▐█▄█▀▀█  ▐█.▪    ▄█▀▀█ ▐█·
- ███ ▐█▌.▐▌▐█▌▐███▌▐█▄▄▌    ▐███▌██▌▐▀▐█ ▪▐▌ ▐█▌·    ▐█ ▪▐▌▐█▌
-. ▀   ▀█▄▀▪▀▀▀·▀▀▀  ▀▀▀     ·▀▀▀ ▀▀▀ · ▀  ▀  ▀▀▀      ▀  ▀ ▀▀▀
+# Set up audio bridge
+audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
 
-"""
-    print(center_banner(raw_banner))
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    if audio_bridge_enabled:
+        print("Starting WebRTC Audio Bridge server on port 8081...")
+        try:
+            from .audio_bridge.audio_bridge_server import audio_bridge
+            # Start in a background task
+            asyncio.create_task(audio_bridge.run_server())
+        except Exception as e:
+            print(f"Error initializing audio bridge: {e}")
+    
+    yield  # This yields control back to FastAPI
+    
+    # Shutdown logic
+    if audio_bridge_enabled:
+        try:
+            from .audio_bridge.audio_bridge_server import audio_bridge
+            print("Stopping WebRTC Audio Bridge server...")
+            try:
+                await audio_bridge.stop_server()
+                print("WebRTC Audio Bridge server stopped successfully")
+            except AttributeError as e:
+                # Handle the case where the server hasn't fully started yet
+                print(f"Audio bridge server not fully initialized: {e}")
+            except Exception as e:
+                print(f"Error stopping audio bridge server: {e}")
+                import traceback
+                print(traceback.format_exc())
+        except ImportError as e:
+            print(f"Error importing audio bridge for shutdown: {e}")
+        except Exception as e:
+            print(f"Unexpected error during audio bridge shutdown: {e}")
+            import traceback
+            print(traceback.format_exc())
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Initialize FastAPI with the lifespan context manager
+app = FastAPI(lifespan=lifespan)
 
-# Display banner
-display_banner()
+# Custom logging middleware
+class LoggingMiddleware:
+    def __init__(self):
+        self.debug = os.getenv("DEBUG", "false").lower() == "true"
+        self.status_endpoints = [
+            "/status", 
+            "/audio-bridge/status", 
+            "/audio-bridge-status"
+        ]
+        
+    async def __call__(self, request: Request, call_next):
+        # For status check endpoints, explicitly disable ALL logging (including FastAPI's built-in logging)
+        path = request.url.path
+        if any(path.endswith(endpoint) for endpoint in self.status_endpoints):
+            return await call_next(request)
+        
+        # Process all other requests normally
+        response = await call_next(request)
+        
+        # Log all other requests
+        client_ip = f"{request.client.host}:{request.client.port}"
+        logger.info(f"{client_ip} - \"{request.method} {request.url.path} HTTP/1.1\" {response.status_code}")
+        
+        return response
 
-app = FastAPI()
 
 # Mount static files and templates
 app.mount("/app/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static/outputs", StaticFiles(directory="app/static/outputs"), name="static_outputs")
 templates = Jinja2Templates(directory="app/templates")
+
+# Add the logging middleware first
+app.middleware("http")(LoggingMiddleware())
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,6 +109,177 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Set up WebRTC audio bridge if enabled
+if audio_bridge_enabled:
+    try:
+        from .audio_bridge.audio_bridge_router import router as audio_bridge_router
+        from .audio_bridge.audio_bridge_server import audio_bridge
+        
+        # Register the router with the app
+        app.include_router(audio_bridge_router)
+        
+        # Add a WebSocket route that can proxy to the audio bridge server for browsers
+        @app.websocket("/audio-bridge/ws/{client_id}")
+        async def proxy_audio_bridge_websocket(websocket: WebSocket, client_id: str):
+            """Proxy WebSocket connections to the audio bridge server"""
+            # This endpoint handles the WebSocket connection directly in FastAPI
+            # which allows browsers to connect to the same origin without certificate issues
+            await websocket.accept()
+            logger.info(f"WebSocket connection accepted for client {client_id}")
+            
+            # Register the client with the audio bridge
+            if not await audio_bridge.register_client(client_id):
+                await websocket.close(code=1000, reason="Failed to register client")
+                return
+                
+            # Send welcome message
+            await websocket.send_json({
+                "type": "welcome", 
+                "client_id": client_id,
+                "message": "Connected to audio bridge via FastAPI proxy"
+            })
+            
+            try:
+                # Main message handling loop
+                while True:
+                    # Receive message from client
+                    data = await websocket.receive_text()
+                    try:
+                        message = json.loads(data)
+                    except json.JSONDecodeError:
+                        error_response = {
+                            "type": "error",
+                            "message": "Malformed JSON received in WebSocket message."
+                        }
+                        await websocket.send_json(error_response)
+                        continue
+                    
+                    # Add client_id to the message
+                    message["client_id"] = client_id
+                    
+                    # Process the message with the audio bridge server
+                    response = await audio_bridge.handle_signaling(message)
+                    
+                    # Send response back to client
+                    await websocket.send_json(response)
+                    
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for client {client_id}")
+            except Exception as e:
+                logger.error(f"Error in audio bridge WebSocket handler: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+            finally:
+                # Unregister client when connection is closed
+                await audio_bridge.unregister_client(client_id)
+                logger.info(f"Unregistered client {client_id} from audio bridge")
+        
+        # HTTP proxy endpoints for the audio bridge
+        @app.post("/audio-bridge/offer")
+        async def proxy_audio_bridge_offer(request: Request):
+            """Proxy for the audio bridge offer endpoint"""
+            try:
+                # Get the client request data
+                data = await request.json()
+                
+                # Pass to the audio bridge server
+                response = await audio_bridge.handle_offer(request)
+                
+                # Return the response
+                return response
+            except Exception as e:
+                logger.error(f"Error in audio bridge offer proxy: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return {"type": "error", "message": f"Error: {str(e)}"}
+        
+        @app.post("/audio-bridge/test")
+        async def proxy_audio_bridge_test(request: Request):
+            """Proxy for the audio bridge test endpoint"""
+            try:
+                # Get the client request data
+                data = await request.json()
+                
+                # Pass to the audio bridge server
+                response = await audio_bridge.handle_test(request)
+                
+                # Return the response
+                return response
+            except Exception as e:
+                logger.error(f"Error in audio bridge test proxy: {e}")
+                return {"status": "error", "message": f"Error: {str(e)}"}
+        
+        @app.post("/audio-bridge/register")
+        async def proxy_audio_bridge_register(request: Request):
+            """Proxy for the audio bridge register endpoint"""
+            try:
+                data = await request.json()
+                client_id = data.get("client_id")
+                
+                if not client_id:
+                    return {"status": "error", "message": "Client ID is required"}
+                    
+                # Register with the audio bridge
+                result = await audio_bridge.register_client(client_id)
+                
+                if result:
+                    return {"status": "success", "message": f"Client {client_id} registered"}
+                else:
+                    return {"status": "error", "message": "Failed to register client"}
+            except Exception as e:
+                logger.error(f"Error in audio bridge register proxy: {e}")
+                return {"status": "error", "message": str(e)}
+        
+        print("WebRTC Audio Bridge enabled and registered on port 8081")
+        
+    except ImportError as e:
+        print(f"WebRTC Audio Bridge enabled but failed to import: {e}")
+
+# This endpoint is available regardless of whether audio bridge is enabled
+@app.get("/audio-bridge/status")
+async def get_audio_bridge_status():
+    """Get the status of the audio bridge server"""
+    
+    # The environment variable that controls if audio bridge is enabled
+    audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
+    
+    # If audio bridge is disabled, return a proper response instead of 404
+    if not audio_bridge_enabled:
+        return {
+            "enabled": False,
+            "status": "disabled",
+            "message": "Audio bridge is disabled. Set ENABLE_AUDIO_BRIDGE=true to enable.",
+            "total_clients": 0,
+            "active_clients": 0
+        }
+    
+    try:
+        from .audio_bridge.audio_bridge_server import audio_bridge
+        
+        # Get the list of clients
+        clients = audio_bridge.clients_set
+        active_clients = sum(1 for c in clients if audio_bridge.is_client_streaming.get(c, False))
+        
+        return {
+            "enabled": True,
+            "status": "active",
+            "total_clients": len(clients),
+            "active_clients": active_clients,
+            "clients": list(clients)
+        }
+    except Exception as e:
+        import traceback
+        logger.error(f"Error getting audio bridge status: {e}")
+        logger.error(traceback.format_exc())
+        
+        return {
+            "enabled": False,
+            "status": "error",
+            "message": f"Error getting audio bridge status: {str(e)}",
+            "total_clients": 0,
+            "active_clients": 0
+        }
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request):
@@ -73,6 +293,7 @@ async def get_index(request: Request):
     elevenlabs_voice = os.getenv("ELEVENLABS_TTS_VOICE")
     kokoro_voice = os.getenv("KOKORO_TTS_VOICE")
     faster_whisper_local = os.getenv("FASTER_WHISPER_LOCAL", "true").lower() == "true"
+    audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
 
     return templates.TemplateResponse("index.html", {
         "request": request,
@@ -86,24 +307,34 @@ async def get_index(request: Request):
         "elevenlabs_voice": elevenlabs_voice,
         "kokoro_voice": kokoro_voice,
         "faster_whisper_local": faster_whisper_local,
+        "audio_bridge_enabled": audio_bridge_enabled,
     })
 
 @app.get("/characters")
-async def get_characters():
+async def get_characters(request: Request):
+    # Add CORS headers for cross-origin requests
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }
+    
     if not os.path.exists(characters_folder):
         logger.warning(f"Characters folder not found: {characters_folder}")
-        return {"characters": ["Assistant"]}  # fallback
+        return JSONResponse(content={"characters": ["Assistant"]}, headers=headers)  # fallback
     
     try:
         character_dirs = [d for d in os.listdir(characters_folder) 
                         if os.path.isdir(os.path.join(characters_folder, d))]
         if not character_dirs:
             logger.warning("No character folders found")
-            return {"characters": ["Assistant"]}  # fallback
-        return {"characters": character_dirs}
+            return JSONResponse(content={"characters": ["Assistant"]}, headers=headers)  # fallback
+        
+        logger.info(f"Found {len(character_dirs)} characters")
+        return JSONResponse(content={"characters": character_dirs}, headers=headers)
     except Exception as e:
         logger.error(f"Error listing characters: {e}")
-        return {"characters": ["Assistant"]}  # fallback in case of error
+        return JSONResponse(content={"characters": ["Assistant"]}, headers=headers)  # fallback in case of error
 
 @app.get("/elevenlabs_voices")
 async def get_elevenlabs_voices():
@@ -601,170 +832,15 @@ async def get_character_history():
         print(f"Error getting character history: {e}")
         return {"status": "error", "message": str(e)}
 
-@app.get("/kokoro_voices")
-async def get_kokoro_voices():
-    try:
-        # Get the base URL from environment or use default
-        kokoro_base_url = os.getenv("KOKORO_BASE_URL", "http://localhost:8880/v1")
-        
-        # Get authentication credentials
-        kokoro_username = os.getenv("KOKORO_USERNAME", "")
-        kokoro_password = os.getenv("KOKORO_PASSWORD", "")
-        
-        # Prepare auth headers if credentials are provided
-        headers = {}
-        if kokoro_username and kokoro_password:
-            import base64
-            auth_str = f"{kokoro_username}:{kokoro_password}"
-            auth_bytes = auth_str.encode('ascii')
-            base64_auth = base64.b64encode(auth_bytes).decode('ascii')
-            headers["Authorization"] = f"Basic {base64_auth}"
-        
-        try:
-            # Use the correct API endpoint for voices
-            voices_url = f"{kokoro_base_url}/audio/voices"
-            
-            # Make HTTP request directly with SSL verification disabled
-            connector = aiohttp.TCPConnector(ssl=False)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                try:
-                    async with session.get(voices_url, headers=headers, timeout=3) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            # Process the voices from the response
-                            voices = []
-                            
-                            # Language/accent codes mapping
-                            language_codes = {
-                                'a': 'American English',
-                                'b': 'British English',
-                                'e': 'European Spanish',
-                                'f': 'French',
-                                'g': 'German',
-                                'h': 'Hindi',
-                                'i': 'Italian',
-                                'j': 'Japanese',
-                                'k': 'Korean',
-                                'p': 'Polish',
-                                'r': 'Russian',
-                                's': 'Spanish',
-                                'z': 'Chinese'
-                            }
-                            
-                            # Get all voice IDs
-                            voice_ids = data.get("voices", [])
-                            
-                            # Group voices by language/accent
-                            english_voices = []  # American and British English
-                            other_voices_by_language = {}  # Organize other voices by language code
-                            unknown_voices = []
-                            
-                            for voice_id in voice_ids:
-                                parts = voice_id.split('_')
-                                if len(parts) >= 2:
-                                    lang_code = parts[0]
-                                    # First character is language code
-                                    accent_code = lang_code[:1]
-                                    
-                                    # Prioritize English voices (American and British)
-                                    if accent_code in ['a', 'b']:
-                                        english_voices.append(voice_id)
-                                    else:
-                                        # Group other voices by language
-                                        if accent_code not in other_voices_by_language:
-                                            other_voices_by_language[accent_code] = []
-                                        other_voices_by_language[accent_code].append(voice_id)
-                                else:
-                                    unknown_voices.append(voice_id)
-                            
-                            # Sort voices within each group
-                            english_voices.sort()
-                            for lang in other_voices_by_language:
-                                other_voices_by_language[lang].sort()
-                            unknown_voices.sort()
-                            
-                            # Create final sorted list: English first, then other languages alphabetically
-                            sorted_voice_ids = english_voices
-                            
-                            # Process English voices
-                            for voice_id in english_voices:
-                                parts = voice_id.split('_')
-                                if len(parts) >= 2:
-                                    lang_code = parts[0]
-                                    name = parts[1].capitalize()
-                                    
-                                    accent_code = lang_code[:1]
-                                    gender_code = lang_code[1:2]
-                                    
-                                    gender = "Female" if gender_code == "f" else "Male"
-                                    accent_label = f" - {language_codes.get(accent_code, 'Unknown')}"
-                                    
-                                    voices.append({
-                                        "id": voice_id,
-                                        "name": f"{name} ({gender}){accent_label}"
-                                    })
-                            
-                            # Add other language groups with separators
-                            for lang in sorted(other_voices_by_language.keys()):
-                                # Add a language group header if we have voices for this language
-                                if other_voices_by_language[lang]:
-                                    language_name = language_codes.get(lang, "Unknown Language")
-                                    
-                                    # Add a separator for this language group
-                                    voices.append({
-                                        "id": f"separator_{lang}",
-                                        "name": f"--- {language_name} Voices ---"
-                                    })
-                                    
-                                    # Add the voices for this language
-                                    for voice_id in other_voices_by_language[lang]:
-                                        parts = voice_id.split('_')
-                                        if len(parts) >= 2:
-                                            name = parts[1].capitalize()
-                                            gender_code = parts[0][1:2]
-                                            gender = "Female" if gender_code == "f" else "Male"
-                                            
-                                            voices.append({
-                                                "id": voice_id,
-                                                "name": f"{name} ({gender})"
-                                            })
-                            
-                            # Add unknown voices at the end if any
-                            if unknown_voices:
-                                voices.append({
-                                    "id": "separator_unknown",
-                                    "name": "--- Other Voices ---"
-                                })
-                                
-                                for voice_id in unknown_voices:
-                                    voices.append({
-                                        "id": voice_id,
-                                        "name": voice_id
-                                    })
-                            
-                            return {"voices": voices}
-                        else:
-                            # Log the error and return empty voices
-                            error_text = await response.text()
-                            logger.error(f"Error fetching Kokoro voices: HTTP {response.status} - {error_text}")
-                            return {"voices": [], "error": f"HTTP Error: {response.status}"}
-                except aiohttp.ClientConnectorError as e:
-                    # Handle connection errors specifically (server not available)
-                    logger.info(f"Kokoro server not available at {kokoro_base_url} - This is normal if you don't have Kokoro running")
-                    return {"voices": [], "error": "Kokoro server not available"}
-                except asyncio.TimeoutError:
-                    # Handle timeout errors
-                    # logger.info(f"Timeout connecting to Kokoro server at {kokoro_base_url}")
-                    return {"voices": [], "error": "Connection timeout"}
-            
-        except Exception as e:
-            # Log the error and return empty voices with error message
-            logger.error(f"Error fetching Kokoro voices: {str(e)}")
-            return {"voices": [], "error": str(e)}
-            
-    except Exception as e:
-        logger.error(f"Critical error in get_kokoro_voices: {str(e)}")
-        return {"voices": [], "error": str(e)}
+
+@app.get("/audio-bridge-test", response_class=HTMLResponse)
+async def get_audio_bridge_test(request: Request):
+    audio_bridge_enabled = os.getenv("ENABLE_AUDIO_BRIDGE", "false").lower() == "true"
+    return templates.TemplateResponse("audio_bridge.html", {
+        "request": request,
+        "audio_bridge_enabled": audio_bridge_enabled
+    })
+
 
 def signal_handler(sig, frame):
     print('\nShutting down gracefully... Press Ctrl+C again to force exit')
@@ -810,8 +886,30 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        print("Starting server. Press Ctrl+C to exit.")
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        port = int(os.environ.get("PORT", 8080))
+        host = os.environ.get("HOST", "0.0.0.0")
+        
+        # Check if SSL certificates exist in the certs directory
+        cert_dir = "certs"
+        cert_file = os.path.join(cert_dir, "cert.pem")
+        key_file = os.path.join(cert_dir, "key.pem")
+        
+        # Use SSL if certificates exist
+        if os.path.exists(cert_file) and os.path.exists(key_file):
+            print(f"Running with HTTPS on {host}:{port}")
+            uvicorn.run(
+                "app.main:app", 
+                host=host, 
+                port=port, 
+                reload=True,
+                ssl_certfile=cert_file,
+                ssl_keyfile=key_file
+            )
+        else:
+            print(f"Running with HTTP on {host}:{port}")
+            print("For WebRTC to work across devices, HTTPS is recommended.")
+            print("Generate self-signed certificates with: python generate_certs.py")
+            uvicorn.run("app.main:app", host=host, port=port, reload=True)
     except KeyboardInterrupt:
         print("\nServer stopped by keyboard interrupt.")
     finally:

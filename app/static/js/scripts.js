@@ -1,5 +1,8 @@
 document.addEventListener("DOMContentLoaded", function() {
-    const websocket = new WebSocket(`ws://${window.location.hostname}:8000/ws`);
+    // Use secure WebSocket (wss://) if the page is loaded over HTTPS
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsPort = window.location.protocol === 'https:' ? '8080' : '8000';
+    const websocket = new WebSocket(`${wsProtocol}//${window.location.hostname}:${wsPort}/ws`);
     const themeToggle = document.getElementById('theme-toggle');
     const downloadButton = document.getElementById('download-button');
     const body = document.body;
@@ -34,16 +37,51 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Function to fetch available characters
     async function fetchCharacters() {
+        console.log("Fetching characters...");
         try {
             const response = await fetch('/characters');
             if (response.ok) {
                 const data = await response.json();
-                populateCharacterSelect(data.characters);
+                console.log(`Successfully fetched ${data.characters.length} characters:`, data.characters);
+                
+                if (data.characters && data.characters.length > 0) {
+                    populateCharacterSelect(data.characters);
+                } else {
+                    console.error('No characters found in response');
+                    // Create a fallback option if no characters were returned
+                    characterSelect.innerHTML = '';
+                    const option = document.createElement('option');
+                    option.value = 'default';
+                    option.textContent = 'Default Character';
+                    characterSelect.appendChild(option);
+                }
             } else {
-                console.error('Failed to fetch characters:', response.statusText);
+                console.error('Failed to fetch characters:', response.status, response.statusText);
+                
+                // Try to get more detailed error information
+                try {
+                    const errorData = await response.text();
+                    console.error('Error response:', errorData);
+                } catch (parseError) {
+                    console.error('Could not parse error response');
+                }
+                
+                // Create a fallback option if fetch failed
+                characterSelect.innerHTML = '';
+                const option = document.createElement('option');
+                option.value = 'default';
+                option.textContent = 'Default Character';
+                characterSelect.appendChild(option);
             }
         } catch (error) {
             console.error('Error fetching characters:', error);
+            
+            // Create a fallback option if fetch failed
+            characterSelect.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = 'default';
+            option.textContent = 'Default Character';
+            characterSelect.appendChild(option);
         }
     }
     
@@ -112,19 +150,26 @@ document.addEventListener("DOMContentLoaded", function() {
         characters.forEach(character => {
             const option = document.createElement('option');
             option.value = character;
+
             option.textContent = character.replace(/_/g, ' '); // Replace all underscores with spaces
             // Seleciona "seu_elias" por padrão
             if (character === 'seu_elias') {
                 option.selected = true;
             }
+
             characterSelect.appendChild(option);
         });
         
         // Try to set the default character
         const defaultCharacter = document.querySelector('meta[name="default-character"]')?.getAttribute('content');
-        if (defaultCharacter) {
+        if (defaultCharacter && characters.includes(defaultCharacter)) {
             characterSelect.value = defaultCharacter;
+        } else if (characters.length > 0) {
+            // Set the first character as default if the specified default isn't available
+            characterSelect.value = characters[0];
         }
+        
+        console.log(`Populated ${characters.length} characters in dropdown`);
     }
 
     websocket.onopen = function(event) {
@@ -600,41 +645,609 @@ document.addEventListener("DOMContentLoaded", function() {
     loadThemePreference();
     setDarkModeDefault();
 
-    // Fetch Kokoro voices
-    fetch('/kokoro_voices')
-        .then(response => response.json())
-        .then(data => {
-            const voiceSelect = document.getElementById('kokoro-voice-select');
+
+    // Initialize audio bridge status checking
+    let lastStatusCheckTime = 0;
+    const STATUS_CHECK_MIN_INTERVAL = 180000; // Minimum 3 minutes between checks
+    
+    // Update the audio bridge status panel with proper details
+    function updateAudioBridgePanel(data) {
+        // Update the status indicators
+        const mainStatus = document.getElementById('audio-bridge-status');
+        const bridgeClients = document.getElementById('audio-bridge-clients');
+        const detailsSection = document.getElementById('audio-bridge-details');
+        const actionsSection = document.querySelector('.audio-bridge-actions');
+        
+        if (!mainStatus || !bridgeClients || !detailsSection || !actionsSection) {
+            console.warn('Audio bridge panel elements not found');
+            return;
+        }
+        
+        // Clear the checking message
+        const checkingMessage = document.querySelector('.checking-status-message');
+        if (checkingMessage) {
+            checkingMessage.remove();
+        }
+        
+        // Check if we have a client ID stored - this indicates our local connection state
+        const storedClientId = localStorage.getItem('audio_bridge_client_id');
+        const isLocallyConnected = !!storedClientId;
+        
+        // Update status text
+        if (data.enabled) {
+            // Bridge is enabled
+            const connected = isLocallyConnected || data.active_clients > 0;
+            mainStatus.textContent = connected ? 'Connected' : 'Ready';
+            mainStatus.style.color = connected ? '#4CAF50' : '#FFA500';
             
-            // Clear any existing options
-            voiceSelect.innerHTML = '';
+            // Update clients count - if we're connected locally, ensure at least 1 is shown
+            const activeClients = isLocallyConnected ? Math.max(1, data.active_clients || 0) : (data.active_clients || 0);
+            bridgeClients.textContent = activeClients;
             
-            // If we have voices, populate the dropdown with them
-            if (data.voices && data.voices.length > 0) {
-                // Populate with available voices
-                data.voices.forEach(voice => {
-                    const option = document.createElement('option');
-                    option.value = voice.id;
-                    option.text = voice.name;
-                    voiceSelect.add(option);
-                });
+            // Update details section
+            let detailsHtml = `<strong>Status:</strong> ${data.status}<br>`;
+            detailsHtml += `<strong>Total Clients:</strong> ${data.total_clients || 0}<br>`;
+            
+            // If we're locally connected, ensure active clients is at least 1
+            detailsHtml += `<strong>Active Clients:</strong> ${activeClients}<br>`;
+            
+            if (connected) {
+                detailsHtml += `<div class="alert alert-success mt-2">Audio bridge is active and receiving audio!</div>`;
             } else {
-                // If no voices are available, add a placeholder
-                const placeholderOption = document.createElement('option');
-                placeholderOption.value = 'af_bella';
-                placeholderOption.text = 'Select Kokoro TTS to Load';
-                voiceSelect.add(placeholderOption);
+                detailsHtml += `<div class="alert alert-warning mt-2">No active clients. Please initialize the audio bridge.</div>`;
             }
-        })
-        .catch(error => {
-            console.error('Error fetching Kokoro voices:', error);
             
-            // On error, ensure we have a placeholder
-            const voiceSelect = document.getElementById('kokoro-voice-select');
-            voiceSelect.innerHTML = '';
-            const placeholderOption = document.createElement('option');
-            placeholderOption.value = 'af_bella';
-            placeholderOption.text = 'Select Kokoro TTS to Load';
-            voiceSelect.add(placeholderOption);
-        });
+            detailsSection.innerHTML = detailsHtml;
+            
+            // Update actions section based on connection state
+            if (connected) {
+                // Show test and disconnect options when connected
+                actionsSection.innerHTML = `
+                    <button id="test-bridge-btn" class="btn btn-primary">Test Connection</button>
+                `;
+            } else {
+                // Show initialize button when not connected but bridge is active
+                actionsSection.innerHTML = `
+                    <button id="init-bridge-btn" class="btn btn-primary">Initialize Bridge</button>
+                `;
+            }
+        } else {
+            // Bridge is disabled
+            mainStatus.textContent = 'Disabled';
+            mainStatus.style.color = '#888'; // Gray color for disabled
+            
+            // Update clients count (should be 0)
+            bridgeClients.textContent = '0';
+            
+            // Update details section
+            detailsSection.innerHTML = `
+                <div class="alert alert-secondary mt-2">
+                    Audio bridge is disabled on the server. 
+                    <br>Set ENABLE_AUDIO_BRIDGE=true in your .env file to enable this feature.
+                </div>
+            `;
+            
+            // Clear actions section when disabled - no button needed
+            actionsSection.innerHTML = '';
+        }
+        
+        // Re-attach event listeners to any new buttons
+        setupAudioBridgeButtons();
+    }
+    
+    async function checkAudioBridgeStatus(force = false) {
+        try {
+            const response = await fetch('/audio-bridge/status');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Check if we have a client ID stored - this indicates our local connection state
+            const storedClientId = localStorage.getItem('audio_bridge_client_id');
+            const isLocallyConnected = !!storedClientId;
+            
+            // Update the mini status indicator
+            const miniStatus = document.getElementById('audio-bridge-status-mini');
+            const miniBridgeBtn = document.getElementById('init-bridge-btn-mini');
+            
+            if (miniStatus) {
+                if (data.enabled) {
+                    // Determine connection status - connected if we have a client ID or there are active clients
+                    const connected = isLocallyConnected || data.active_clients > 0;
+                    
+                    miniStatus.textContent = connected ? 'Connected' : 'Ready';
+                    miniStatus.className = connected ? 'status-enabled' : 'status-warning';
+                    
+                    if (miniBridgeBtn) {
+                        miniBridgeBtn.textContent = connected ? 'View' : 'Connect';
+                    }
+                } else {
+                    miniStatus.textContent = 'Disabled';
+                    miniStatus.className = 'status-disabled';
+                    
+                    if (miniBridgeBtn) {
+                        miniBridgeBtn.textContent = 'View';
+                    }
+                }
+            }
+            
+            // Update the panel if it's open
+            const panel = document.getElementById('audio-bridge-section');
+            if (panel && panel.style.display === 'block') {
+                updateAudioBridgePanel(data);
+            }
+            
+            return data.enabled;
+        } catch (error) {
+            console.error('Error checking audio bridge status:', error);
+            
+            // Update UI for error state
+            const miniStatus = document.getElementById('audio-bridge-status-mini');
+            if (miniStatus) {
+                miniStatus.textContent = 'Error';
+                miniStatus.className = 'status-error';
+            }
+            
+            // Update the panel if it's open
+            const panel = document.getElementById('audio-bridge-section');
+            if (panel && panel.style.display === 'block') {
+                const mainStatus = document.getElementById('audio-bridge-status');
+                const bridgeClients = document.getElementById('audio-bridge-clients');
+                const detailsSection = document.getElementById('audio-bridge-details');
+                
+                if (mainStatus) mainStatus.textContent = 'Error';
+                if (mainStatus) mainStatus.style.color = '#FF0000';
+                if (bridgeClients) bridgeClients.textContent = 'Unknown';
+                
+                if (detailsSection) {
+                    detailsSection.innerHTML = `
+                        <div class="alert alert-danger">
+                            Error checking audio bridge status: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+            
+            return false;
+        }
+    }
+
+    function toggleAudioBridgePanel(forceShow) {
+        const panel = document.getElementById('audio-bridge-section');
+        if (panel) {
+            if (forceShow) {
+                panel.style.display = 'block';
+                
+                // Show a "checking" message while we fetch the status
+                const detailsSection = document.getElementById('audio-bridge-details');
+                if (detailsSection) {
+                    // Only add if not already present
+                    if (!document.querySelector('.checking-status-message')) {
+                        detailsSection.innerHTML = `
+                            <div class="checking-status-message alert alert-info">
+                                Checking audio bridge status...
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Fetch the current status to update the panel
+                checkAudioBridgeStatus(true);
+            } else if (panel.style.display === 'block') {
+                panel.style.display = 'none';
+            } else {
+                panel.style.display = 'block';
+                
+                // Show a "checking" message while we fetch the status
+                const detailsSection = document.getElementById('audio-bridge-details');
+                if (detailsSection) {
+                    // Only add if not already present
+                    if (!document.querySelector('.checking-status-message')) {
+                        detailsSection.innerHTML = `
+                            <div class="checking-status-message alert alert-info">
+                                Checking audio bridge status...
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Fetch the current status to update the panel
+                checkAudioBridgeStatus(true);
+            }
+        }
+    }
+
+    // Check status on page load
+    setTimeout(() => checkAudioBridgeStatus(true), 1000); // Initial check with 1 second delay
+    
+    // Setup audio bridge buttons
+    setupAudioBridgeButtons();
+
+    // Check status periodically but much less frequently (5 minutes instead of 2 minutes)
+    let statusInterval = setInterval(() => checkAudioBridgeStatus(), 300000);
+    
+    // Reduce polling frequency when the page is not active
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            // Page is hidden, clear the frequent interval
+            clearInterval(statusInterval);
+            // Check less frequently (once every 10 minutes)
+            statusInterval = setInterval(() => checkAudioBridgeStatus(), 600000);
+        } else {
+            // Page is visible again, resume more frequent checks
+            clearInterval(statusInterval);
+            statusInterval = setInterval(() => checkAudioBridgeStatus(), 300000);
+            // Check when page becomes visible only if we haven't checked recently
+            const now = Date.now();
+            if (now - lastStatusCheckTime > STATUS_CHECK_MIN_INTERVAL) {
+                checkAudioBridgeStatus(true);
+            }
+        }
+    });
+
+    // Show dialog with audio bridge status
+    function showAudioBridgeStatus(statusData) {
+        // Check if we have a client ID stored - this indicates our local connection state
+        const storedClientId = localStorage.getItem('audio_bridge_client_id');
+        const isLocallyConnected = !!storedClientId;
+        
+        // Create the panel if it doesn't exist
+        let panel = document.querySelector('.audio-bridge-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.className = 'audio-bridge-panel';
+            panel.innerHTML = `
+                <div class="audio-bridge-status-header">
+                    <h3>Audio Bridge Status</h3>
+                    <button class="close-btn" id="close-status-btn" aria-label="Close">×</button>
+                </div>
+                <div class="audio-bridge-status-content">
+                    <div class="status-row">
+                        <span class="status-label">Status:</span>
+                        <span id="status-value" class="status-value status-enabled">Enabled</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-label">Clients:</span>
+                        <span id="clients-value" class="status-value">Active Clients: 0</span>
+                    </div>
+                    
+                    <div class="status-details" id="status-details">
+                        <div class="status-row no-border">
+                            <span class="status-label">Status:</span> 
+                            <span id="detail-status" class="status-value">active</span>
+                        </div>
+                        <div class="status-row no-border">
+                            <span class="status-label">Total Clients:</span> 
+                            <span id="detail-total-clients" class="status-value">0</span>
+                        </div>
+                        <div class="status-row no-border">
+                            <span class="status-label">Active Clients:</span> 
+                            <span id="detail-active-clients" class="status-value">0</span>
+                        </div>
+                    </div>
+                    
+                    <div id="status-message" class="alert"></div>
+                    
+                    <div class="audio-bridge-actions">
+                        <button id="test-bridge-btn" class="btn btn-primary">Test Connection</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(panel);
+            
+            // Add event listener to close button
+            document.getElementById('close-status-btn').addEventListener('click', function() {
+                panel.style.display = 'none';
+            });
+            
+            // Add event listener to test bridge button
+            document.getElementById('test-bridge-btn').addEventListener('click', function() {
+                panel.style.display = 'none';
+                
+                // Check for stored client ID to determine if we're connected
+                const clientId = localStorage.getItem('audio_bridge_client_id');
+                if (clientId || statusData.active_clients > 0) {
+                    // We're connected, show test dialog
+                    showTestDialog();
+                } else {
+                    // Not connected, show connect dialog
+                    showConnectDialog();
+                }
+            });
+        }
+        
+        // Update status information
+        document.getElementById('status-value').textContent = statusData.status === 'active' ? 'Enabled' : 'Disabled';
+        document.getElementById('status-value').className = statusData.status === 'active' ? 'status-value status-enabled' : 'status-value status-disabled';
+        
+        // If we're locally connected, ensure at least 1 active client is shown
+        const activeClients = isLocallyConnected ? Math.max(1, statusData.active_clients || 0) : (statusData.active_clients || 0);
+        document.getElementById('clients-value').textContent = `Active Clients: ${activeClients}`;
+        
+        document.getElementById('detail-status').textContent = statusData.status;
+        document.getElementById('detail-total-clients').textContent = statusData.total_clients;
+        document.getElementById('detail-active-clients').textContent = activeClients;
+        
+        // Show appropriate message based on status
+        const statusMessage = document.getElementById('status-message');
+        
+        if (statusData.status === 'active') {
+            const connected = isLocallyConnected || statusData.active_clients > 0;
+            if (connected) {
+                statusMessage.className = 'alert alert-success';
+                statusMessage.innerHTML = `
+                    Audio bridge is active and receiving audio!
+                `;
+            } else {
+                statusMessage.className = 'alert alert-warning';
+                statusMessage.innerHTML = `
+                    No active clients. Please initialize the audio bridge.
+                `;
+            }
+        } else {
+            statusMessage.className = 'alert alert-danger';
+            statusMessage.innerHTML = `
+                Audio bridge is disabled. Please check server settings.
+            `;
+        }
+        
+        // Display the panel
+        panel.style.display = 'block';
+    }
+
+    // Setup event listeners for audio bridge buttons
+    function setupAudioBridgeButtons() {
+        // Main panel buttons
+        const initBtn = document.getElementById('init-bridge-btn');
+        if (initBtn) {
+            initBtn.addEventListener('click', function() {
+                // Instead of opening a new tab, show the dialog
+                showConnectDialog();
+            });
+        }
+        
+        const testBtn = document.getElementById('test-bridge-btn');
+        if (testBtn) {
+            testBtn.addEventListener('click', function() {
+                // Show test dialog instead of connect dialog
+                showTestDialog();
+            });
+        }
+        
+        // Mini display button
+        const miniBridgeBtn = document.getElementById('init-bridge-btn-mini');
+        if (miniBridgeBtn) {
+            miniBridgeBtn.addEventListener('click', async function() {
+                // First check if the audio bridge is enabled on the server
+                try {
+                    const response = await fetch('/audio-bridge/status');
+                    const data = await response.json();
+                    
+                    console.log('Audio bridge status:', data);
+                    
+                    // If bridge is disabled, just show the panel
+                    if (!data.enabled) {
+                        console.log('Audio bridge is disabled on server');
+                        document.getElementById('audioBridgePanel').classList.toggle('hidden');
+                        return;
+                    }
+                    
+                    // Check if we already have a client ID or active clients
+                    const storedClientId = localStorage.getItem('audio_bridge_client_id');
+                    const activeClients = data.active_clients || [];
+                    
+                    if (storedClientId || activeClients.length > 0) {
+                        // Just show the panel if we're already connected or others are connected
+                        document.getElementById('audioBridgePanel').classList.toggle('hidden');
+                        return;
+                    }
+                    
+                    // Check if the audio bridge is active but not connected
+                    if (data.status === 'active' && !window.audioBridgeConnected) {
+                        // Show connect dialog
+                        document.getElementById('connectBridgeDialog').classList.remove('hidden');
+                        
+                        // Set debug mode flag for improved detection
+                        localStorage.setItem('audio_bridge_debug_mode', 'true');
+                        console.log('Audio bridge debug mode enabled for improved detection');
+                    } else {
+                        // Just toggle the panel
+                        document.getElementById('audioBridgePanel').classList.toggle('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error checking audio bridge status:', error);
+                }
+            });
+        }
+        
+        // Close panel button
+        const closeBtn = document.getElementById('close-bridge-panel');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function() {
+                const panel = document.getElementById('audio-bridge-section');
+                if (panel) {
+                    panel.style.display = 'none';
+                }
+            });
+        }
+    }
+    
+    // Show test dialog for already connected clients
+    function showTestDialog() {
+        // First check audio bridge status
+        fetch('/audio-bridge/status')
+            .then(response => response.json())
+            .then(data => {
+                // If audio bridge is disabled, just show the panel with disabled status
+                if (!data.enabled) {
+                    console.log('Audio bridge is disabled');
+                    toggleAudioBridgePanel(true);
+                    return;
+                }
+                
+                // Check if we have a client ID stored
+                const storedClientId = localStorage.getItem('audio_bridge_client_id');
+                
+                // If no client ID and no active clients, show connect dialog instead
+                if (!storedClientId && data.active_clients === 0) {
+                    console.log('No client ID stored, showing connect dialog');
+                    showConnectDialog();
+                    return;
+                }
+                
+                // Remove any existing dialog first to prevent duplicates
+                const existingDialog = document.querySelector('.audio-bridge-confirm-dialog');
+                if (existingDialog) {
+                    document.body.removeChild(existingDialog);
+                }
+                
+                // Create a custom dialog
+                const confirmDialog = document.createElement('div');
+                confirmDialog.className = 'audio-bridge-confirm-dialog';
+                confirmDialog.innerHTML = `
+                    <div class="confirm-dialog-content">
+                        <h3>Audio Bridge Options</h3>
+                        <p>You are connected to the audio bridge. What would you like to do?</p>
+                        <div class="dialog-buttons">
+                            <button id="goto-test-page-btn" class="btn btn-primary">View Test Page</button>
+                            <button id="disconnect-btn" class="btn">Disconnect</button>
+                            <button id="cancel-test-btn" class="btn">Cancel</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(confirmDialog);
+                
+                // Add event listeners to the buttons
+                document.getElementById('goto-test-page-btn').addEventListener('click', function() {
+                    // Remove the dialog
+                    document.body.removeChild(confirmDialog);
+                    
+                    // Open the test page in the same tab instead of a new tab
+                    window.location.href = '/audio-bridge-test';
+                });
+                
+                document.getElementById('disconnect-btn').addEventListener('click', function() {
+                    // Remove the dialog
+                    document.body.removeChild(confirmDialog);
+                    
+                    // Disconnect from audio bridge
+                    if (window.audioBridge) {
+                        window.audioBridge.disconnect().then(() => {
+                            localStorage.removeItem('audio_bridge_client_id');
+                            checkAudioBridgeStatus(true); // Update status to show disconnected
+                            alert('Disconnected from audio bridge.');
+                        });
+                    }
+                });
+                
+                document.getElementById('cancel-test-btn').addEventListener('click', function() {
+                    // Remove the dialog
+                    document.body.removeChild(confirmDialog);
+                });
+            })
+            .catch(error => {
+                console.error('Error checking audio bridge status:', error);
+                // Show the panel anyway in case of error
+                toggleAudioBridgePanel(true);
+            });
+    }
+
+    // Show connection dialog
+    function showConnectDialog() {
+        // Check if audio bridge is enabled first
+        fetch('/audio-bridge/status')
+            .then(response => response.json())
+            .then(data => {
+                // If audio bridge is disabled, just show the panel with the disabled status
+                if (!data.enabled) {
+                    console.log('Audio bridge is disabled');
+                    toggleAudioBridgePanel(true);
+                    return;
+                }
+
+                // Check if already connected
+                const storedClientId = localStorage.getItem('audio_bridge_client_id');
+                if (storedClientId) {
+                    // If already connected, show test dialog instead
+                    showTestDialog();
+                    return;
+                }
+                
+                // Remove any existing dialog first to prevent duplicates
+                const existingDialog = document.querySelector('.audio-bridge-confirm-dialog');
+                if (existingDialog) {
+                    document.body.removeChild(existingDialog);
+                }
+                
+                // Create a custom dialog
+                const confirmDialog = document.createElement('div');
+                confirmDialog.className = 'audio-bridge-confirm-dialog';
+                confirmDialog.innerHTML = `
+                    <div class="confirm-dialog-content">
+                        <h3>Connect to Audio Bridge</h3>
+                        <p>Would you like to connect to the audio bridge? This requires microphone permission.</p>
+                        <div class="dialog-buttons">
+                            <button id="confirm-connect-btn" class="btn btn-primary">Connect</button>
+                            <button id="cancel-connect-btn" class="btn">Cancel</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(confirmDialog);
+                
+                // Add event listeners to the buttons
+                document.getElementById('confirm-connect-btn').addEventListener('click', function() {
+                    // Remove the dialog
+                    document.body.removeChild(confirmDialog);
+                    
+                    // Request microphone permission and initialize
+                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                        navigator.mediaDevices.getUserMedia({audio: true})
+                            .then(stream => {
+                                console.log('Microphone permission granted, initializing bridge...');
+                                // Stop the stream we just used for permission
+                                stream.getTracks().forEach(track => track.stop());
+                                
+                                // Initialize the bridge
+                                if (window.audioBridge) {
+                                    window.audioBridge.initialize()
+                                        .then(success => {
+                                            if (success) {
+                                                console.log('Audio bridge initialized from dashboard!');
+                                                checkAudioBridgeStatus(true); // Update status display
+                                                
+                                                // Show the panel
+                                                toggleAudioBridgePanel(true);
+                                            } else {
+                                                alert('Failed to initialize audio bridge. Please try again.');
+                                            }
+                                        });
+                                } else {
+                                    alert('Audio bridge not available. Please refresh the page and try again.');
+                                }
+                            })
+                            .catch(err => {
+                                console.warn('Microphone permission denied:', err);
+                                alert('Microphone permission is required for the audio bridge to work.');
+                            });
+                    } else {
+                        alert('Your browser does not support microphone access.');
+                    }
+                });
+                
+                document.getElementById('cancel-connect-btn').addEventListener('click', function() {
+                    // Remove the dialog
+                    document.body.removeChild(confirmDialog);
+                    // Show the panel anyway
+                    toggleAudioBridgePanel(true);
+                });
+            })
+            .catch(error => {
+                console.error('Error checking audio bridge status:', error);
+                // Show the panel anyway in case of error
+                toggleAudioBridgePanel(true);
+            });
+    }
 });

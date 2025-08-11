@@ -48,8 +48,10 @@ ELEVENLABS_TTS_MODEL = os.getenv('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2
 KOKORO_BASE_URL = os.getenv('KOKORO_BASE_URL', 'http://localhost:8880/v1')
 KOKORO_TTS_VOICE = os.getenv('KOKORO_TTS_VOICE', 'af_bella')
 MAX_CHAR_LENGTH = int(os.getenv('MAX_CHAR_LENGTH', 500))
-VOICE_SPEED = os.getenv('VOICE_SPEED', '1.0')
-XTTS_NUM_CHARS = int(os.getenv('XTTS_NUM_CHARS', 255))
+
+SILENCE_DURATION_SECONDS = float(os.getenv("SILENCE_DURATION_SECONDS", "2.0"))
+XTTS_SPEED = os.getenv('XTTS_SPEED', '1.1') 
+
 os.environ["COQUI_TOS_AGREED"] = "1"
 
 
@@ -765,7 +767,7 @@ def detect_silence(data, threshold=1000, chunk_size=1024):
     return np.mean(np.abs(audio_data)) < threshold
 
 # Function to record audio from the microphone and save to a file
-def record_audio(file_path, silence_threshold=512, silence_duration=4.0, chunk_size=1024):
+def record_audio(file_path, silence_threshold=512, silence_duration=SILENCE_DURATION_SECONDS, chunk_size=1024):
     p = pyaudio.PyAudio()
     stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=chunk_size)
     frames = []
