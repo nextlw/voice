@@ -145,7 +145,15 @@ if audio_bridge_enabled:
                 while True:
                     # Receive message from client
                     data = await websocket.receive_text()
-                    message = json.loads(data)
+                    try:
+                        message = json.loads(data)
+                    except json.JSONDecodeError:
+                        error_response = {
+                            "type": "error",
+                            "message": "Malformed JSON received in WebSocket message."
+                        }
+                        await websocket.send_json(error_response)
+                        continue
                     
                     # Add client_id to the message
                     message["client_id"] = client_id
